@@ -1,0 +1,45 @@
+volumes:
+  db_data:
+
+networks:
+  finance_net:
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: finance_db
+    environment:
+      MYSQL_ROOT_PASSWORD: rootpassword
+      MYSQL_DATABASE: finance_budgeter
+      MYSQL_USER: finance
+      MYSQL_PASSWORD: finance_pass
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+    networks:
+      - finance_net
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-prootpassword"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    restart: unless-stopped
+
+  finance_app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    env_file:
+      - .env
+    environment:
+      - DATABASE_URL=mysql+pymysql://finance:finance_pass@db:3306/finance_budgeter
+    ports:
+      - "8000:8000"
+    networks:
+      - finance_net
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: unless-stopped
