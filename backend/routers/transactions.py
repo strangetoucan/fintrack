@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import or_, func, case
 from pydantic import BaseModel
 from typing import Optional, Literal
-from datetime import date
+from datetime import date, datetime
 
 from database import get_db
 from models import Transaction, TxType, Investment as InvestmentModel
@@ -20,8 +20,9 @@ class TransactionOut(BaseModel):
     category:        str
     amount:          float
     type:            str
-    investment_id:   Optional[int]   = None
-    investment_name: Optional[str]   = None
+    investment_id:   Optional[int]      = None
+    investment_name: Optional[str]      = None
+    created_at:      Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
@@ -47,6 +48,7 @@ def _tx_out(tx: Transaction) -> TransactionOut:
         type            = tx.type,
         investment_id   = tx.investment_id,
         investment_name = tx.investment.name if tx.investment else None,
+        created_at      = tx.created_at,
     )
 
 
@@ -68,7 +70,7 @@ def list_transactions(
             Transaction.desc.ilike(term),
             Transaction.category.ilike(term),
         ))
-    return [_tx_out(t) for t in q.order_by(Transaction.date.desc(), Transaction.id.desc()).limit(limit).all()]
+    return [_tx_out(t) for t in q.order_by(Transaction.created_at.desc(), Transaction.date.desc(), Transaction.id.desc()).limit(limit).all()]
 
 
 @router.post("/", response_model=TransactionOut, status_code=201)

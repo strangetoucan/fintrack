@@ -25,6 +25,13 @@ def _migrate(eng):
             ))
             conn.commit()
         logger.info("Migration: added investment_id to transactions")
+    if "created_at" not in existing:
+        with eng.connect() as conn:
+            conn.execute(text(
+                "ALTER TABLE transactions ADD COLUMN created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP"
+            ))
+            conn.commit()
+        logger.info("Migration: added created_at to transactions")
 
 
 @asynccontextmanager

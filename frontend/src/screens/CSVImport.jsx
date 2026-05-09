@@ -77,7 +77,8 @@ function parseAmount(raw) {
 
 const MONTH_MAP = { jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06', jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12' };
 
-function parseDate(raw) {
+// fmt: 'DMY' = DD/MM/YYYY (default, Indian banking), 'MDY' = MM/DD/YYYY (US)
+function parseDate(raw, fmt = 'DMY') {
   if (!raw && raw !== 0) return null;
   if (typeof raw === 'number') {
     try {
@@ -88,15 +89,37 @@ function parseDate(raw) {
   const s = String(raw).trim();
   if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return _validYear(s);
   const m1 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
-  if (m1) return _validYear(`${m1[3]}-${m1[2].padStart(2, '0')}-${m1[1].padStart(2, '0')}`);
+  if (m1) {
+    const [, a, b, y] = m1;
+    const aNum = parseInt(a, 10), bNum = parseInt(b, 10);
+    // Resolve ambiguity: if first number > 12 it must be the day (DD/MM)
+    // if second number > 12 it must be the month (MM/DD)
+    let day, mon;
+    if (aNum > 12)      { day = a; mon = b; }           // definitely DD/MM
+    else if (bNum > 12) { day = b; mon = a; }           // definitely MM/DD
+    else                { [day, mon] = fmt === 'MDY' ? [b, a] : [a, b]; }
+    return _validYear(`${y}-${mon.padStart(2, '0')}-${day.padStart(2, '0')}`);
+  }
   const m2 = s.match(/^(\d{1,2})[\s\-\/]([a-zA-Z]{3})[\s\-\/](\d{4})$/);
   if (m2) {
     const mo = MONTH_MAP[m2[2].toLowerCase()];
     if (mo) return _validYear(`${m2[3]}-${mo}-${m2[1].padStart(2, '0')}`);
   }
-  const dt = new Date(s);
-  if (!isNaN(dt.getTime())) return _validYear(dt.toISOString().slice(0, 10));
   return null;
+}
+
+// Scans the first 20 date values in a column to guess DD/MM vs MM/DD.
+function autoDetectDateFmt(rows, dateColIdx) {
+  if (dateColIdx === '' || dateColIdx === undefined) return 'DMY';
+  for (const row of rows.slice(0, 20)) {
+    const s = String(row[dateColIdx] || '').trim();
+    const m = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+    if (m) {
+      if (parseInt(m[1], 10) > 12) return 'DMY';
+      if (parseInt(m[2], 10) > 12) return 'MDY';
+    }
+  }
+  return 'DMY'; // default: Indian banking standard
 }
 
 function _validYear(iso) {
@@ -188,7 +211,7 @@ export default function CSVImport({ onNavigate }) {
   const [fileName,   setFileName]   = useState('');
   const [sheetData,  setSheetData]  = useState([]);
   const [headers,    setHeaders]    = useState([]);
-  const [mapping,    setMapping]    = useState({ dateCol: '', descCol: '', debitCol: '', creditCol: '', amountCol: '', catCol: '', typeCol: '' });
+  const [mapping,    setMapping]    = useState({ dateCol: '', descCol: '', debitCol: '', creditCol: '', amountCol: '', catCol: '', typeCol: '', dateFormat: 'DMY' });
   const [isTwoPanel, setIsTwoPanel] = useState(false);
   const [reviewRows, setReviewRows] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -210,10 +233,12 @@ export default function CSVImport({ onNavigate }) {
       // CSV: read as UTF-8 text so ₹ and other Unicode chars survive intact.
       // XLS/XLSX: read as binary array (required by SheetJS for binary formats).
       const wb = isCSV
-        ? XLSX.read(e.target.result, { type: 'string', cellDates: false })
+        ? XLSX.read(e.target.result, { type: 'string', cellDates: false, raw: true })
         : XLSX.read(new Uint8Array(e.target.result), { type: 'array', cellDates: false });
       const ws   = wb.Sheets[wb.SheetNames[0]];
-      const raw  = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+      // raw: true — prevents SheetJS from silently coercing date-looking strings
+      // (e.g. "04/01/2026") into date serial numbers using US MM/DD/YYYY format.
+      const raw  = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', raw: true });
 
       // Find header row (first row with ≥3 non-empty cells, within first 10 rows)
       let hdrIdx = 0;
@@ -227,12 +252,13 @@ export default function CSVImport({ onNavigate }) {
       if (normalized) {
         setHeaders(normalized.headers);
         setSheetData(normalized.data);
-        setMapping(normalized.mapping);
+        setMapping({ ...normalized.mapping, dateFormat: autoDetectDateFmt(normalized.data, normalized.mapping.dateCol) });
         setIsTwoPanel(true);
       } else {
+        const detected = autoDetectMapping(hdrs);
         setHeaders(hdrs);
         setSheetData(rows);
-        setMapping({ ...autoDetectMapping(hdrs), typeCol: '' });
+        setMapping({ ...detected, typeCol: '', dateFormat: autoDetectDateFmt(rows, detected.dateCol) });
         setIsTwoPanel(false);
       }
       setStep(1);
@@ -278,7 +304,7 @@ export default function CSVImport({ onNavigate }) {
         else if (debit  !== null) amount = -Math.abs(debit);
       }
 
-      const date        = parseDate(rawDate);
+      const date        = parseDate(rawDate, mapping.dateFormat);
       const desc        = String(rawDesc).trim();
       const absAmt      = amount !== null ? Math.abs(amount) : 0;
       const type        = typeOverride === 'expense' || typeOverride === 'income'
@@ -340,7 +366,7 @@ export default function CSVImport({ onNavigate }) {
 
   const reset = () => {
     setStep(0); setFileName(''); setSheetData([]); setHeaders([]);
-    setMapping({ dateCol: '', descCol: '', debitCol: '', creditCol: '', amountCol: '', catCol: '', typeCol: '' });
+    setMapping({ dateCol: '', descCol: '', debitCol: '', creditCol: '', amountCol: '', catCol: '', typeCol: '', dateFormat: 'DMY' });
     setIsTwoPanel(false);
     setReviewRows([]); setProgress(0); setResult(null);
     if (fileRef.current) fileRef.current.value = '';
@@ -472,6 +498,28 @@ export default function CSVImport({ onNavigate }) {
                 </select>
               </div>
             ))}
+          </div>
+
+          <div style={{ marginBottom: 16 }}>
+            <div style={{ fontSize: 11.5, color: '#9CA3AF', fontWeight: 500, marginBottom: 6 }}>Date Format</div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              {[['DMY', 'DD/MM/YYYY', 'Indian / UK (HDFC, SBI, ICICI…)'], ['MDY', 'MM/DD/YYYY', 'US format']].map(([val, label, hint]) => (
+                <button
+                  key={val}
+                  onClick={() => setMapping((m) => ({ ...m, dateFormat: val }))}
+                  style={{
+                    padding: '8px 14px', borderRadius: 9, border: `1px solid ${mapping.dateFormat === val ? accent : '#2A2D3E'}`,
+                    background: mapping.dateFormat === val ? accent + '18' : 'transparent',
+                    color: mapping.dateFormat === val ? accent : '#6B7280',
+                    fontFamily: 'DM Sans', fontSize: 12.5, fontWeight: 600, cursor: 'pointer',
+                    textAlign: 'left',
+                  }}
+                >
+                  <div>{label}</div>
+                  <div style={{ fontSize: 10.5, fontWeight: 400, opacity: 0.8, marginTop: 2 }}>{hint}</div>
+                </button>
+              ))}
+            </div>
           </div>
 
           <div style={{ padding: '10px 14px', background: '#161820', borderRadius: 8, fontSize: 12, color: '#9CA3AF', marginBottom: 20 }}>

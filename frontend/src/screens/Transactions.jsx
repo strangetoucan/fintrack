@@ -10,12 +10,14 @@ import { fetchTransactions, deleteTransaction } from '../api/transactions';
 import { useAccent } from '../context/TweakContext';
 
 export default function Transactions() {
-  const [search,  setSearch ] = useState('');
-  const [filter,  setFilter ] = useState('all');
-  const [rows,    setRows   ] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [apiDown, setApiDown] = useState(false);
+  const [search,   setSearch  ] = useState('');
+  const [filter,   setFilter  ] = useState('all');
+  const [rows,     setRows    ] = useState([]);
+  const [loading,  setLoading ] = useState(true);
+  const [apiDown,  setApiDown ] = useState(false);
   const [showModal, setShowModal] = useState(false);
+  const [sortBy,   setSortBy  ] = useState('created_at');
+  const [sortDir,  setSortDir ] = useState('desc');
   const accent = useAccent();
 
   const load = useCallback(async () => {
@@ -45,6 +47,18 @@ export default function Transactions() {
       // noop — backend may not be running
     }
   };
+
+  const toggleSort = (col) => {
+    if (sortBy === col) setSortDir((d) => d === 'desc' ? 'asc' : 'desc');
+    else { setSortBy(col); setSortDir('desc'); }
+  };
+
+  const sortedRows = [...rows].sort((a, b) => {
+    const av = sortBy === 'date' ? a.date : (a.created_at ?? a.date);
+    const bv = sortBy === 'date' ? b.date : (b.created_at ?? b.date);
+    const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+    return sortDir === 'desc' ? -cmp : cmp;
+  });
 
   const totalIncome  = rows.filter((t) => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0);
   const totalExpense = rows.filter((t) => t.type === 'expense').reduce((s, t) => s + Math.abs(t.amount), 0);
@@ -122,24 +136,41 @@ export default function Transactions() {
           {/* Table */}
           {!loading && (
             <div style={{ overflowX: 'auto' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 130px 110px 36px', minWidth: 480 }}>
-                {['Transaction', 'Category', 'Date', 'Amount', ''].map((h) => (
-                  <div key={h} style={{
-                    fontSize: 11, fontWeight: 600, color: '#6B7280',
-                    textTransform: 'uppercase', letterSpacing: '0.08em',
-                    padding: '8px 12px', borderBottom: '1px solid #2A2D3E',
-                  }}>
-                    {h}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 130px 150px 110px 36px', minWidth: 480 }}>
+                {[
+                  { label: 'Transaction', col: null },
+                  { label: 'Category',    col: null },
+                  { label: 'Txn Date',    col: 'date' },
+                  { label: 'Amount',      col: null },
+                  { label: '',            col: null },
+                ].map(({ label, col }) => (
+                  <div
+                    key={label}
+                    onClick={col ? () => toggleSort(col) : undefined}
+                    style={{
+                      fontSize: 11, fontWeight: 600,
+                      color: col && sortBy === col ? '#E8EAF0' : '#6B7280',
+                      textTransform: 'uppercase', letterSpacing: '0.08em',
+                      padding: '8px 12px', borderBottom: '1px solid #2A2D3E',
+                      cursor: col ? 'pointer' : 'default',
+                      userSelect: 'none',
+                      display: 'flex', alignItems: 'center', gap: 4,
+                    }}
+                  >
+                    {label}
+                    {col && sortBy === col && (
+                      <span style={{ fontSize: 10 }}>{sortDir === 'desc' ? '↓' : '↑'}</span>
+                    )}
                   </div>
                 ))}
 
-                {rows.length === 0 && (
+                {sortedRows.length === 0 && (
                   <div style={{ gridColumn: '1/-1', padding: '32px 12px', textAlign: 'center', color: '#6B7280', fontSize: 13 }}>
                     No transactions found.
                   </div>
                 )}
 
-                {rows.map((t) => (
+                {sortedRows.map((t) => (
                   <React.Fragment key={t.id}>
                     {/* Description */}
                     <div style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
@@ -167,8 +198,13 @@ export default function Transactions() {
                       <Badge color="#3B82F6">{t.category}</Badge>
                     </div>
                     {/* Date */}
-                    <div className="tx-date-col" style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center', color: '#6B7280', fontSize: 12.5 }}>
-                      {typeof t.date === 'string' ? t.date : new Date(t.date).toISOString().slice(0, 10)}
+                    <div className="tx-date-col" style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22', display: 'flex', flexDirection: 'column', justifyContent: 'center', color: '#6B7280', fontSize: 12.5 }}>
+                      <span>{typeof t.date === 'string' ? t.date : new Date(t.date).toISOString().slice(0, 10)}</span>
+                      {t.created_at && (
+                        <span style={{ fontSize: 11, marginTop: 2 }}>
+                          {new Date(t.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      )}
                     </div>
                     {/* Amount */}
                     <div style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center' }}>

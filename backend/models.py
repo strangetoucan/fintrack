@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, Integer, String, Numeric, Date, Enum as SAEnum, ForeignKey
+from sqlalchemy import Column, Integer, String, Numeric, Date, DateTime, Enum as SAEnum, ForeignKey, func
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -20,6 +20,7 @@ class Transaction(Base):
     type          = Column(SAEnum(TxType), nullable=False)
     investment_id = Column(Integer, ForeignKey("investments.id", ondelete="SET NULL"), nullable=True)
     investment    = relationship("Investment", backref="transactions", lazy="joined")
+    created_at    = Column(DateTime, server_default=func.now(), nullable=False)
 
 
 class Investment(Base):
