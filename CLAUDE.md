@@ -34,6 +34,30 @@ npm run dev      # dev server at localhost:5173
 npm run build    # output to frontend/dist/
 ```
 
+### Testing (Backend)
+```bash
+cd backend
+pip install -r requirements.txt -r requirements-test.txt
+
+pytest                              # all unit tests
+pytest -m "not integration"        # skip MySQL-specific tests (default for CI)
+pytest tests/test_transactions.py  # single file
+pytest -k "TestCreateTransaction"  # single class
+
+# With coverage
+pytest --cov=. --cov-report=term-missing
+```
+
+Tests run against **SQLite in-memory** — no MySQL needed. Tests marked `@pytest.mark.integration` use MySQL-specific SQL (`DATE_FORMAT`) and are skipped by default.
+
+### Testing (Frontend)
+```bash
+cd frontend
+npm test             # run once (Vitest)
+npm run test:watch   # watch mode
+npm run test:coverage
+```
+
 API docs available at `http://localhost:8000/docs` when backend is running.
 
 ## Architecture
@@ -69,6 +93,28 @@ app.include_router(<name>.router, prefix="/api/<name>", tags=["<name>"])
 
 ### Theming System
 `TweakCtx` (in `src/context/TweakContext.jsx`) provides `palette`, `surface`, and `density` values app-wide. CSS variables (`--card-bg`, `--card-border`, `--card-radius`, `--card-pad`, `--content-pad`, `--content-gap`) are set on the main scroll container in `App.jsx` and consumed by all screens. Use `useTweakCtx()` to read palette/surface for color values.
+
+## Test Architecture
+
+### Backend (`backend/tests/`)
+`conftest.py` patches `database.engine` and `database.SessionLocal` to SQLite before any router imports, then builds a minimal FastAPI app (no lifespan, no migrations, no seed). This avoids MySQL-specific startup code entirely. Each test function gets a fresh schema via the `_reset_db` autouse fixture (`create_all` / `drop_all`).
+
+**Do not import from `main.py` in tests** — its lifespan runs MySQL `ALTER TABLE` statements that fail on SQLite. Import routers directly.
+
+Coverage omit patterns live in `backend/.coveragerc`, not on the CLI.
+
+### Frontend (`frontend/src/`)
+Vitest is configured in `vitest.config.js` with jsdom. Test files sit next to the source they test (`format.test.js` beside `format.js`). Global test setup is in `src/test/setup.js` (imports `@testing-library/jest-dom`).
+
+**`apiFetch` header merging:** options are destructured as `{ headers: callerHeaders, ...rest }` before the fetch call so that `...rest` does not overwrite the merged `headers` object.
+
+## CI / Jenkins
+
+The `Jenkinsfile` runs on a **Kubernetes Cloud** (K3s). Each build gets a pod with two containers (`python:3.13-slim`, `node:20-alpine`) that share the workspace volume. Stages target containers with `container('python')` / `container('node')`.
+
+- JNLP tunnel must point to the **node internal IP**, not `localhost` or the public domain, or the agent handshake will fail.
+- Images use `imagePullPolicy: IfNotPresent` — pre-pull with `sudo k3s ctr images pull` to avoid cold-start delays.
+- Integration tests (`-m "not integration"`) are skipped in CI since there is no MySQL pod.
 
 ## Known Constraints
 
