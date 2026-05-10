@@ -132,7 +132,7 @@ spec:
             steps {
                 container('node') {
                     dir('frontend') {
-                        sh 'npm ci --prefer-offline'
+                        sh 'npm install'
                     }
                 }
             }
