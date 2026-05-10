@@ -1,0 +1,8 @@
+[run]
+omit =
+    tests/*
+    seed.py
+    .venv/*
+
+[report]
+show_missing = true

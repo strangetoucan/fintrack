@@ -54,13 +54,12 @@ pipeline {
                     sh '''
                         . .venv/bin/activate
                         mkdir -p reports
-                        # Skip MySQL-only integration tests in unit-test runs
+                        # Omit patterns are read from .coveragerc — no --cov-omit needed
                         pytest -m "not integration" \
                                --junit-xml=reports/junit-backend.xml \
                                --cov=. \
                                --cov-report=xml:reports/coverage-backend.xml \
-                               --cov-report=term-missing \
-                               --cov-omit="tests/*,seed.py,.venv/*"
+                               --cov-report=term-missing
                     '''
                 }
             }
