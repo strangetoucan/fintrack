@@ -2,6 +2,8 @@
 // Requires on the Jenkins agent:
 //   - Python 3.9+  (accessible as 'python3')
 //   - Node.js 18+  (accessible as 'node' / 'npm')
+//   - sudo apt-get access OR python3-venv already installed
+//     (on Debian/Ubuntu the pipeline installs python3-venv automatically)
 //
 // Unit tests run against SQLite — no MySQL service needed.
 // Integration tests (marked @pytest.mark.integration) are skipped unless
@@ -31,6 +33,12 @@ pipeline {
             steps {
                 dir('backend') {
                     sh '''
+                        # On Debian/Ubuntu, python3-venv is a separate package.
+                        # Detect the exact Python version and install its venv package.
+                        PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+                        if ! python3 -c "import ensurepip" 2>/dev/null; then
+                            sudo apt-get install -y "python${PY_VER}-venv"
+                        fi
                         python3 -m venv .venv
                         . .venv/bin/activate
                         pip install --quiet --upgrade pip
