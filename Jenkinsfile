@@ -33,6 +33,7 @@ spec:
     # ── Python container (backend tests) ──────────────────────────────────────
     - name: python
       image: python:3.13-slim
+      imagePullPolicy: IfNotPresent
       command: [cat]
       tty: true
       env:
@@ -53,6 +54,7 @@ spec:
     # ── Node container (frontend tests + build) ────────────────────────────────
     - name: node
       image: node:20-alpine
+      imagePullPolicy: IfNotPresent
       command: [cat]
       tty: true
       env:
@@ -74,6 +76,7 @@ spec:
         timeout(time: 20, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '20'))
         disableConcurrentBuilds()
+        timestamps()
     }
 
     environment {
