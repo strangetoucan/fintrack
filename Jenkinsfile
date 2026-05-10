@@ -1,16 +1,74 @@
-// Declarative pipeline for Finance Budgeter
-// Requires on the Jenkins agent:
-//   - Python 3.9+  (accessible as 'python3')
-//   - Node.js 18+  (accessible as 'node' / 'npm')
-//   - sudo apt-get access OR python3-venv already installed
-//     (on Debian/Ubuntu the pipeline installs python3-venv automatically)
+// Declarative pipeline for Finance Budgeter — Kubernetes Cloud edition
 //
-// Unit tests run against SQLite — no MySQL service needed.
-// Integration tests (marked @pytest.mark.integration) are skipped unless
-// the INTEGRATION_TESTS environment variable is set to 'true'.
+// Runs every stage inside a dedicated Kubernetes pod so the Jenkins controller
+// needs no Python/Node installed locally.  The official Docker images ship with
+// venv and npm out of the box — no apt-get workarounds needed.
+//
+// Prerequisites (one-time, in Jenkins → Manage Jenkins → Clouds):
+//   • Kubernetes Cloud configured and reachable
+//   • KUBECONFIG credential (if deploying) stored as "kubeconfig-prod"
+//
+// Unit tests run against SQLite — no MySQL pod needed.
+// Integration tests (@pytest.mark.integration) are skipped by default.
 
 pipeline {
-    agent any
+
+    agent {
+        kubernetes {
+            // Pod is spun up fresh for every build and destroyed on completion.
+            label "finance-budgeter-${env.BUILD_NUMBER}"
+            yaml """
+apiVersion: v1
+kind: Pod
+metadata:
+  labels:
+    app: finance-budgeter-ci
+spec:
+  # Allow pulling from private registries if needed
+  # imagePullSecrets:
+  #   - name: registry-secret
+
+  containers:
+
+    # ── Python container (backend tests) ──────────────────────────────────────
+    - name: python
+      image: python:3.13-slim
+      command: [cat]
+      tty: true
+      env:
+        - name: PYTHONDONTWRITEBYTECODE
+          value: "1"
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        - name: DATABASE_URL
+          value: "sqlite:///./test_finance.db"
+      resources:
+        requests:
+          memory: "512Mi"
+          cpu: "250m"
+        limits:
+          memory: "1Gi"
+          cpu: "500m"
+
+    # ── Node container (frontend tests + build) ────────────────────────────────
+    - name: node
+      image: node:20-alpine
+      command: [cat]
+      tty: true
+      env:
+        - name: CI
+          value: "true"
+      resources:
+        requests:
+          memory: "512Mi"
+          cpu: "250m"
+        limits:
+          memory: "1Gi"
+          cpu: "500m"
+
+"""
+        }
+    }
 
     options {
         timeout(time: 20, unit: 'MINUTES')
@@ -19,48 +77,39 @@ pipeline {
     }
 
     environment {
-        PYTHONDONTWRITEBYTECODE = '1'
-        PYTHONUNBUFFERED        = '1'
-        // Keeps SQLite test file out of the workspace root
-        DATABASE_URL            = 'sqlite:///./test_finance.db'
-        CI                      = 'true'
+        CI = 'true'
     }
 
     stages {
 
-        // ── 1. Backend unit tests ─────────────────────────────────────────────
+        // ── 1. Backend ─────────────────────────────────────────────────────────
         stage('Backend: install deps') {
             steps {
-                dir('backend') {
-                    sh '''
-                        # On Debian/Ubuntu, python3-venv is a separate package.
-                        # Detect the exact Python version and install its venv package.
-                        PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-                        if ! python3 -c "import ensurepip" 2>/dev/null; then
-                            sudo apt-get install -y "python${PY_VER}-venv"
-                        fi
-                        python3 -m venv .venv
-                        . .venv/bin/activate
-                        pip install --quiet --upgrade pip
-                        pip install --quiet -r requirements.txt -r requirements-test.txt
-                    '''
+                container('python') {
+                    dir('backend') {
+                        // python:3.13-slim ships with pip + venv — no apt needed
+                        sh '''
+                            pip install --quiet --upgrade pip
+                            pip install --quiet -r requirements.txt -r requirements-test.txt
+                        '''
+                    }
                 }
             }
         }
 
         stage('Backend: unit tests') {
             steps {
-                dir('backend') {
-                    sh '''
-                        . .venv/bin/activate
-                        mkdir -p reports
-                        # Omit patterns are read from .coveragerc — no --cov-omit needed
-                        pytest -m "not integration" \
-                               --junit-xml=reports/junit-backend.xml \
-                               --cov=. \
-                               --cov-report=xml:reports/coverage-backend.xml \
-                               --cov-report=term-missing
-                    '''
+                container('python') {
+                    dir('backend') {
+                        sh '''
+                            mkdir -p reports
+                            pytest -m "not integration" \
+                                   --junit-xml=reports/junit-backend.xml \
+                                   --cov=. \
+                                   --cov-report=xml:reports/coverage-backend.xml \
+                                   --cov-report=term-missing
+                        '''
+                    }
                 }
             }
             post {
@@ -71,29 +120,31 @@ pipeline {
                         id: 'backend-coverage',
                         name: 'Backend Coverage'
                     )
-                    // Clean up SQLite test artefact
-                    sh 'rm -f backend/test_finance.db'
                 }
             }
         }
 
-        // ── 2. Frontend unit tests ────────────────────────────────────────────
+        // ── 2. Frontend ────────────────────────────────────────────────────────
         stage('Frontend: install deps') {
             steps {
-                dir('frontend') {
-                    sh 'npm ci --prefer-offline'
+                container('node') {
+                    dir('frontend') {
+                        sh 'npm ci --prefer-offline'
+                    }
                 }
             }
         }
 
         stage('Frontend: unit tests') {
             steps {
-                dir('frontend') {
-                    sh '''
-                        mkdir -p reports
-                        npm test -- --reporter=verbose --reporter=junit \
-                            --outputFile.junit=reports/junit-frontend.xml
-                    '''
+                container('node') {
+                    dir('frontend') {
+                        sh '''
+                            mkdir -p reports
+                            npm test -- --reporter=verbose --reporter=junit \
+                                --outputFile.junit=reports/junit-frontend.xml
+                        '''
+                    }
                 }
             }
             post {
@@ -103,26 +154,27 @@ pipeline {
             }
         }
 
-        // ── 3. Frontend build (smoke-check the production bundle) ─────────────
         stage('Frontend: build') {
             steps {
-                dir('frontend') {
-                    sh 'npm run build'
+                container('node') {
+                    dir('frontend') {
+                        sh 'npm run build'
+                    }
                 }
             }
         }
+
     }
 
-    // ── Post-pipeline actions ─────────────────────────────────────────────────
+    // ── Post-pipeline ──────────────────────────────────────────────────────────
     post {
         success {
-            echo "All stages passed. Build #${env.BUILD_NUMBER} is green."
+            echo "Build #${env.BUILD_NUMBER} passed."
         }
         failure {
             echo "Build #${env.BUILD_NUMBER} failed — check the test reports above."
         }
         always {
-            // Archive JUnit XML so they are downloadable from the build page
             archiveArtifacts artifacts: '**/reports/junit-*.xml, **/reports/coverage-*.xml',
                              allowEmptyArchive: true
             cleanWs()
