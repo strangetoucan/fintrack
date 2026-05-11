@@ -1,0 +1,36 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finance-frontend
+  namespace: finance
+  labels:
+    app: finance-frontend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: finance-frontend
+  template:
+    metadata:
+      labels:
+        app: finance-frontend
+    spec:
+      containers:
+        - name: frontend
+          image: your-registry/finance-budgeter-frontend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 80
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "200m"

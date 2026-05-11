@@ -4,9 +4,11 @@
 // needs no Python/Node installed locally.  The official Docker images ship with
 // venv and npm out of the box — no apt-get workarounds needed.
 //
-// Prerequisites (one-time, in Jenkins → Manage Jenkins → Clouds):
+// One-time Jenkins setup:
 //   • Kubernetes Cloud configured and reachable
-//   • KUBECONFIG credential (if deploying) stored as "kubeconfig-prod"
+//   • Credential "kubeconfig-prod"  — kubeconfig file for the target cluster
+//   • Credential "registry-creds"   — username/password for your image registry
+//   • env var  REGISTRY             — registry host (e.g. ghcr.io/youruser)
 //
 // Unit tests run against SQLite — no MySQL pod needed.
 // Integration tests (@pytest.mark.integration) are skipped by default.
@@ -15,7 +17,6 @@ pipeline {
 
     agent {
         kubernetes {
-            // Pod is spun up fresh for every build and destroyed on completion.
             label "finance-budgeter-${env.BUILD_NUMBER}"
             yaml """
 apiVersion: v1
@@ -24,10 +25,6 @@ metadata:
   labels:
     app: finance-budgeter-ci
 spec:
-  # Allow pulling from private registries if needed
-  # imagePullSecrets:
-  #   - name: registry-secret
-
   containers:
 
     # ── Python container (backend tests) ──────────────────────────────────────
@@ -68,29 +65,59 @@ spec:
           memory: "1Gi"
           cpu: "500m"
 
+    # ── Docker container (image build + push) ──────────────────────────────────
+    - name: docker
+      image: docker:24-cli
+      imagePullPolicy: IfNotPresent
+      command: [cat]
+      tty: true
+      volumeMounts:
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+
+    # ── kubectl container (deploy to cluster) ─────────────────────────────────
+    - name: kubectl
+      image: bitnami/kubectl:latest
+      imagePullPolicy: IfNotPresent
+      command: [cat]
+      tty: true
+      resources:
+        requests:
+          memory: "128Mi"
+          cpu: "100m"
+        limits:
+          memory: "256Mi"
+          cpu: "200m"
+
+  volumes:
+    # Mount the host Docker socket so the docker container can build images
+    - name: docker-sock
+      hostPath:
+        path: /var/run/docker.sock
 """
         }
     }
 
     options {
-        timeout(time: 20, unit: 'MINUTES')
+        timeout(time: 30, unit: 'MINUTES')
         buildDiscarder(logRotator(numToKeepStr: '20'))
         disableConcurrentBuilds()
         timestamps()
     }
 
     environment {
-        CI = 'true'
+        CI       = 'true'
+        REGISTRY = 'your-registry'   // e.g. ghcr.io/youruser or docker.io/youruser
+        IMAGE_TAG = "${env.BUILD_NUMBER}"
     }
 
     stages {
 
-        // ── 1. Backend ─────────────────────────────────────────────────────────
+        // ── 1. Backend tests ───────────────────────────────────────────────────
         stage('Backend: install deps') {
             steps {
                 container('python') {
                     dir('backend') {
-                        // python:3.13-slim ships with pip + venv — no apt needed
                         sh '''
                             pip install --quiet --upgrade pip
                             pip install --quiet -r requirements.txt -r requirements-test.txt
@@ -127,7 +154,7 @@ spec:
             }
         }
 
-        // ── 2. Frontend ────────────────────────────────────────────────────────
+        // ── 2. Frontend tests + build ──────────────────────────────────────────
         stage('Frontend: install deps') {
             steps {
                 container('node') {
@@ -167,6 +194,71 @@ spec:
             }
         }
 
+        // ── 3. Build & push Docker images ─────────────────────────────────────
+        stage('Docker: build & push') {
+            when { branch 'main' }
+            steps {
+                container('docker') {
+                    withCredentials([usernamePassword(
+                        credentialsId: 'registry-creds',
+                        usernameVariable: 'REG_USER',
+                        passwordVariable: 'REG_PASS'
+                    )]) {
+                        sh '''
+                            echo "$REG_PASS" | docker login ${REGISTRY} -u "$REG_USER" --password-stdin
+
+                            # Backend
+                            docker build -t ${REGISTRY}/finance-budgeter-backend:${IMAGE_TAG} \
+                                         -t ${REGISTRY}/finance-budgeter-backend:latest \
+                                         ./backend
+
+                            # Frontend (multi-stage: node build → nginx serve)
+                            docker build -t ${REGISTRY}/finance-budgeter-frontend:${IMAGE_TAG} \
+                                         -t ${REGISTRY}/finance-budgeter-frontend:latest \
+                                         ./frontend
+
+                            docker push ${REGISTRY}/finance-budgeter-backend:${IMAGE_TAG}
+                            docker push ${REGISTRY}/finance-budgeter-backend:latest
+                            docker push ${REGISTRY}/finance-budgeter-frontend:${IMAGE_TAG}
+                            docker push ${REGISTRY}/finance-budgeter-frontend:latest
+                        '''
+                    }
+                }
+            }
+        }
+
+        // ── 4. Deploy to Kubernetes ────────────────────────────────────────────
+        stage('Deploy') {
+            when { branch 'main' }
+            steps {
+                container('kubectl') {
+                    withCredentials([file(credentialsId: 'kubeconfig-prod', variable: 'KUBECONFIG')]) {
+                        sh '''
+                            # Apply manifests (namespace, services, ingress — idempotent)
+                            kubectl apply -f k8s/namespace.yaml
+                            kubectl apply -f k8s/backend-service.yaml
+                            kubectl apply -f k8s/frontend-service.yaml
+                            kubectl apply -f k8s/ingress.yaml
+
+                            # Roll out the new image tags
+                            kubectl set image deployment/finance-backend \
+                                backend=${REGISTRY}/finance-budgeter-backend:${IMAGE_TAG} \
+                                --namespace=finance
+
+                            kubectl set image deployment/finance-frontend \
+                                frontend=${REGISTRY}/finance-budgeter-frontend:${IMAGE_TAG} \
+                                --namespace=finance
+
+                            # Wait for rollouts to complete
+                            kubectl rollout status deployment/finance-backend \
+                                --namespace=finance --timeout=120s
+                            kubectl rollout status deployment/finance-frontend \
+                                --namespace=finance --timeout=120s
+                        '''
+                    }
+                }
+            }
+        }
     }
 
     // ── Post-pipeline ──────────────────────────────────────────────────────────

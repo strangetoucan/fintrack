@@ -1,4 +1,5 @@
 import logging
+import os
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -11,6 +12,11 @@ from seed import seed_if_empty
 from routers import transactions, investments, budget, goals, subscriptions
 
 logger = logging.getLogger("finance")
+
+# Comma-separated list of allowed origins injected via env var.
+# Dev default keeps the Vite dev server working without a .env change.
+_raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:5173")
+ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
 
 
 def _migrate(eng):
@@ -54,7 +60,7 @@ app = FastAPI(title="Finance Budgeter API", version="0.1.0", lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

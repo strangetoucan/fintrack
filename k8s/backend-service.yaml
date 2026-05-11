@@ -1,0 +1,13 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: finance-backend
+  namespace: finance
+spec:
+  selector:
+    app: finance-backend
+  ports:
+    - port: 8000
+      targetPort: 8000
+  # ClusterIP — only reachable inside the cluster (nginx proxies to it)
+  type: ClusterIP

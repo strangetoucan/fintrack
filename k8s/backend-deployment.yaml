@@ -1,0 +1,53 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: finance-backend
+  namespace: finance
+  labels:
+    app: finance-backend
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: finance-backend
+  template:
+    metadata:
+      labels:
+        app: finance-backend
+    spec:
+      containers:
+        - name: backend
+          image: your-registry/finance-budgeter-backend:latest
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8000
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: finance-backend-secret
+                  key: DATABASE_URL
+            - name: ALLOWED_ORIGINS
+              valueFrom:
+                secretKeyRef:
+                  name: finance-backend-secret
+                  key: ALLOWED_ORIGINS
+          readinessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 10
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /api/health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "100m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"

@@ -1,0 +1,29 @@
+# Requires an ingress controller (e.g. nginx-ingress or Traefik, built into K3s).
+# Replace finance.yourdomain.com with your actual domain.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: finance-ingress
+  namespace: finance
+  annotations:
+    # For K3s with Traefik:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+    # For cert-manager TLS (remove if handling TLS elsewhere e.g. Netbird):
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  rules:
+    - host: finance.yourdomain.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: finance-frontend
+                port:
+                  number: 80
+  # tls:
+  #   - hosts:
+  #       - finance.yourdomain.com
+  #     secretName: finance-tls
