@@ -15,9 +15,11 @@ spec:
       labels:
         app: finance-backend
     spec:
+      imagePullSecrets:
+        - name: registry-pull-secret
       containers:
         - name: backend
-          image: your-registry/finance-budgeter-backend:latest
+          image: registry.home.strtoucane.me/strangetoucane/finance-budgeter-backend:latest
           imagePullPolicy: Always
           ports:
             - containerPort: 8000

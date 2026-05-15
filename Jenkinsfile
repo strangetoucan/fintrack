@@ -77,7 +77,7 @@ spec:
 
     # ── kubectl container (deploy to cluster) ─────────────────────────────────
     - name: kubectl
-      image: bitnami/kubectl:latest
+      image: bitnami/kubectl:1.30
       imagePullPolicy: IfNotPresent
       command: [cat]
       tty: true
@@ -106,8 +106,8 @@ spec:
     }
 
     environment {
-        CI       = 'true'
-        REGISTRY = 'your-registry'   // e.g. ghcr.io/youruser or docker.io/youruser
+        CI        = 'true'
+        REGISTRY  = 'registry.home.strtoucane.me/strangetoucane'
         IMAGE_TAG = "${env.BUILD_NUMBER}"
     }
 
@@ -232,15 +232,30 @@ spec:
             when { branch 'main' }
             steps {
                 container('kubectl') {
-                    withCredentials([file(credentialsId: 'kubeconfig-prod', variable: 'KUBECONFIG')]) {
+                    withCredentials([file(credentialsId: '123', variable: 'KUBECONFIG')]) {
                         sh '''
-                            # Apply manifests (namespace, services, ingress — idempotent)
+                            # 1. Namespace (must exist before everything else)
                             kubectl apply -f k8s/namespace.yaml
+
+                            # 2. MySQL — bring up (or no-op if already running)
+                            #    Prereq: finance-mysql-secret must be pre-created on the cluster.
+                            kubectl apply -f k8s/mysql-statefulset.yaml
+                            kubectl rollout status statefulset/finance-mysql \
+                                --namespace=finance --timeout=180s
+
+                            # 3. Apply Deployments (registry is already set in the YAML).
+                            #    kubectl set image below will pin to the exact build tag.
+                            #    Prereq: finance-backend-secret and registry-pull-secret must be
+                            #    pre-created on the cluster.
+                            kubectl apply -f k8s/backend-deployment.yaml
+                            kubectl apply -f k8s/frontend-deployment.yaml
+
+                            # 4. Services and ingress (idempotent)
                             kubectl apply -f k8s/backend-service.yaml
                             kubectl apply -f k8s/frontend-service.yaml
                             kubectl apply -f k8s/ingress.yaml
 
-                            # Roll out the new image tags
+                            # 5. Pin both deployments to the exact build image tag
                             kubectl set image deployment/finance-backend \
                                 backend=${REGISTRY}/finance-budgeter-backend:${IMAGE_TAG} \
                                 --namespace=finance
@@ -249,7 +264,7 @@ spec:
                                 frontend=${REGISTRY}/finance-budgeter-frontend:${IMAGE_TAG} \
                                 --namespace=finance
 
-                            # Wait for rollouts to complete
+                            # 6. Wait for rollouts to finish
                             kubectl rollout status deployment/finance-backend \
                                 --namespace=finance --timeout=120s
                             kubectl rollout status deployment/finance-frontend \
