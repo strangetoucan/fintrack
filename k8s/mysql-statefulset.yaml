@@ -1,0 +1,90 @@
+# Headless Service gives the StatefulSet pod a stable DNS name:
+#   finance-mysql-0.finance-mysql.finance.svc.cluster.local
+# Within the same namespace, the backend reaches it simply as: finance-mysql:3306
+apiVersion: v1
+kind: Service
+metadata:
+  name: finance-mysql
+  namespace: finance
+spec:
+  selector:
+    app: finance-mysql
+  ports:
+    - port: 3306
+      targetPort: 3306
+  clusterIP: None
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: finance-mysql
+  namespace: finance
+  labels:
+    app: finance-mysql
+spec:
+  serviceName: finance-mysql
+  replicas: 1
+  selector:
+    matchLabels:
+      app: finance-mysql
+  template:
+    metadata:
+      labels:
+        app: finance-mysql
+    spec:
+      containers:
+        - name: mysql
+          image: mysql:8.0
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: MYSQL_ROOT_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: finance-mysql-secret
+                  key: MYSQL_ROOT_PASSWORD
+            - name: MYSQL_DATABASE
+              value: finance_budgeter
+            - name: MYSQL_USER
+              value: finance
+            - name: MYSQL_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: finance-mysql-secret
+                  key: MYSQL_PASSWORD
+          ports:
+            - containerPort: 3306
+          volumeMounts:
+            - name: mysql-data
+              mountPath: /var/lib/mysql
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "mysqladmin ping -h localhost -u root -p${MYSQL_ROOT_PASSWORD}"
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 6
+          livenessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - "mysqladmin ping -h localhost -u root -p${MYSQL_ROOT_PASSWORD}"
+            initialDelaySeconds: 60
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "256Mi"
+              cpu: "250m"
+            limits:
+              memory: "512Mi"
+              cpu: "500m"
+  volumeClaimTemplates:
+    - metadata:
+        name: mysql-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: 5Gi
