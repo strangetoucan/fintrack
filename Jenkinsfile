@@ -77,7 +77,7 @@ spec:
 
     # ── kubectl container (deploy to cluster) ─────────────────────────────────
     - name: kubectl
-      image: registry.k8s.io/kubectl:v1.30.0
+      image: alpine/k8s:1.30.4
       imagePullPolicy: IfNotPresent
       command: [cat]
       tty: true
