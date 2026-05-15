@@ -248,7 +248,7 @@ spec:
         stage('Deploy') {
             steps {
                 container('kubectl') {
-                    withCredentials([file(credentialsId: '123', variable: 'KUBECONFIG')]) {
+                    withCredentials([file(credentialsId: '132', variable: 'KUBECONFIG')]) {
                         sh '''
                             # 1. Namespace (must exist before everything else)
                             kubectl apply -f k8s/namespace.yaml
