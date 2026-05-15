@@ -77,7 +77,7 @@ spec:
 
     # ── kubectl container (deploy to cluster) ─────────────────────────────────
     - name: kubectl
-      image: bitnami/kubectl:1.30
+      image: registry.k8s.io/kubectl:v1.30.0
       imagePullPolicy: IfNotPresent
       command: [cat]
       tty: true
