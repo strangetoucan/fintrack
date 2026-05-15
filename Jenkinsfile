@@ -196,7 +196,6 @@ spec:
 
         // ── 3. Build & push Docker images ─────────────────────────────────────
         stage('Docker: build & push') {
-            when { branch 'main' }
             steps {
                 container('docker') {
                     withCredentials([usernamePassword(
@@ -229,7 +228,6 @@ spec:
 
         // ── 4. Deploy to Kubernetes ────────────────────────────────────────────
         stage('Deploy') {
-            when { branch 'main' }
             steps {
                 container('kubectl') {
                     withCredentials([file(credentialsId: '123', variable: 'KUBECONFIG')]) {
