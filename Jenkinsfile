@@ -65,15 +65,35 @@ spec:
           memory: "1Gi"
           cpu: "500m"
 
-    # ── Docker container (image build + push) ──────────────────────────────────
+    # ── Docker-in-Docker daemon (K3s uses containerd — no host socket) ──────────
+    - name: docker-daemon
+      image: docker:24-dind
+      imagePullPolicy: IfNotPresent
+      securityContext:
+        privileged: true
+      env:
+        - name: DOCKER_TLS_CERTDIR
+          value: ""
+      volumeMounts:
+        - name: docker-storage
+          mountPath: /var/lib/docker
+      resources:
+        requests:
+          memory: "512Mi"
+          cpu: "250m"
+        limits:
+          memory: "1Gi"
+          cpu: "500m"
+
+    # ── Docker CLI — talks to the DinD daemon over TCP ────────────────────────
     - name: docker
       image: docker:24-cli
       imagePullPolicy: IfNotPresent
       command: [cat]
       tty: true
-      volumeMounts:
-        - name: docker-sock
-          mountPath: /var/run/docker.sock
+      env:
+        - name: DOCKER_HOST
+          value: tcp://localhost:2375
 
     # ── kubectl container (deploy to cluster) ─────────────────────────────────
     - name: kubectl
@@ -90,10 +110,8 @@ spec:
           cpu: "200m"
 
   volumes:
-    # Mount the host Docker socket so the docker container can build images
-    - name: docker-sock
-      hostPath:
-        path: /var/run/docker.sock
+    - name: docker-storage
+      emptyDir: {}
 """
         }
     }
