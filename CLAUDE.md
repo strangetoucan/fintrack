@@ -42,7 +42,7 @@ pip install -r requirements.txt -r requirements-test.txt
 pytest                              # all unit tests
 pytest -m "not integration"        # skip MySQL-specific tests (default for CI)
 pytest tests/test_transactions.py  # single file
-pytest -k "TestCreateTransaction"  # single class
+pytest -k "TestUpdateTransaction"  # single class
 
 # With coverage
 pytest --cov=. --cov-report=term-missing
@@ -66,11 +66,13 @@ API docs available at `http://localhost:8000/docs` when backend is running.
 Vite proxies `/api/*` from `localhost:5173` → `localhost:8000` (configured in `vite.config.js`). The frontend never hardcodes the backend URL; all fetches go through `frontend/src/api/client.js` → `apiFetch()`.
 
 ### Backend Structure
-- **`main.py`** — FastAPI app setup, CORS, lifespan handler that runs `create_all` + inline migrations + seed on startup
-- **`models.py`** — All SQLAlchemy models in one file: `Transaction`, `Investment`, `BudgetCategory`, `Goal`, `EMI`, `Subscription`
+- **`main.py`** — FastAPI app setup, CORS, `SecurityHeadersMiddleware`, `GZipMiddleware`, global 500 handler, lifespan that runs `create_all` + inline migrations + seed on startup; `DELETE /api/reset` requires `{"confirm": "DELETE_ALL_DATA"}` body
+- **`models.py`** — All SQLAlchemy models in one file: `Transaction`, `Investment`, `BudgetCategory`, `Goal`, `EMI`, `Subscription`, `BankAccount`, `RecurringTransaction`, `UserSettings`
 - **`database.py`** — Engine/session setup; reads `DATABASE_URL` from `.env`
 - **`seed.py`** — Inserts sample data if all tables are empty
 - **`routers/`** — One file per resource; each exports a single `router = APIRouter()`
+
+Current routers: `transactions`, `investments`, `budget`, `goals`, `subscriptions`, `accounts`, `recurring`, `search`, `user_settings`.
 
 **Adding a new resource:** create `backend/routers/<name>.py`, then add to `main.py`:
 ```python
@@ -84,7 +86,7 @@ app.include_router(<name>.router, prefix="/api/<name>", tags=["<name>"])
 - **`src/App.jsx`** — Root: holds active screen state, theme state (`TweakCtx`), and renders `Sidebar` + `Topbar` + current `Screen`
 - **`src/screens/`** — One file per page; each screen manages its own data fetching and modal state
 - **`src/api/`** — Thin fetch wrappers per resource; import from here in screens
-- **`src/components/ui/`** — `Card`, `StatCard`, `Badge`, `Icon`, `AccentButton`
+- **`src/components/ui/`** — `Card`, `StatCard`, `Badge`, `Icon`, `AccentButton`, `ConfirmDialog`
 - **`src/components/charts/`** — `AreaChart`, `BarChart`, `DonutChart` (custom SVG, no chart library)
 - **`src/components/modals/`** — Add/edit modals for each entity; receive `onSave`/`onClose` props
 - **`src/components/layout/`** — `Sidebar` (desktop nav), `Topbar`, `BottomNav` (mobile)
@@ -94,6 +96,46 @@ app.include_router(<name>.router, prefix="/api/<name>", tags=["<name>"])
 ### Theming System
 `TweakCtx` (in `src/context/TweakContext.jsx`) provides `palette`, `surface`, and `density` values app-wide. CSS variables (`--card-bg`, `--card-border`, `--card-radius`, `--card-pad`, `--content-pad`, `--content-gap`) are set on the main scroll container in `App.jsx` and consumed by all screens. Use `useTweakCtx()` to read palette/surface for color values.
 
+### Modal Pattern
+All modals use the native `<dialog>` element via `useRef` + `showModal()`. The `::backdrop` pseudo-element is styled in `index.css`. Close behaviour:
+- **Escape key** — browser fires the native `close` event → `onClose` prop is called
+- **Backdrop click** — `onClick` on `<dialog>` checks `e.target === dialogRef.current`
+- **Cancel / × button** — calls `onClose` directly
+
+```jsx
+const dlgRef = useRef(null);
+useEffect(() => { dlgRef.current?.showModal(); }, []);
+
+return (
+  <dialog ref={dlgRef} onClose={onClose}
+    onClick={(e) => { if (e.target === dlgRef.current) onClose(); }}
+    style={{ padding: 0, border: 'none', background: 'transparent', maxWidth: 'none' }}>
+    <div style={{ /* visual content styles */ }}>…</div>
+  </dialog>
+);
+```
+
+**`ConfirmDialog`** (`src/components/ui/ConfirmDialog.jsx`) is the reusable delete-confirmation dialog. Screens store `confirmDlg` state (`null | { message, onConfirm }`) and render it conditionally:
+```jsx
+const [confirmDlg, setConfirmDlg] = useState(null);
+
+const handleDelete = (item) => {
+  setConfirmDlg({
+    message: `Delete "${item.name}"? This cannot be undone.`,
+    onConfirm: async () => { await deleteItem(item.id); load(); },
+  });
+};
+
+// In JSX:
+{confirmDlg && (
+  <ConfirmDialog
+    message={confirmDlg.message}
+    onConfirm={() => { confirmDlg.onConfirm(); setConfirmDlg(null); }}
+    onCancel={() => setConfirmDlg(null)}
+  />
+)}
+```
+
 ## Test Architecture
 
 ### Backend (`backend/tests/`)
@@ -101,12 +143,22 @@ app.include_router(<name>.router, prefix="/api/<name>", tags=["<name>"])
 
 **Do not import from `main.py` in tests** — its lifespan runs MySQL `ALTER TABLE` statements that fail on SQLite. Import routers directly.
 
+**Bulk-delete with body in tests:** FastAPI's `DELETE /bulk` reads the body via a Pydantic model. Use `client.request("DELETE", url, json={"ids": [...]})` in tests — `client.delete(url, json=...)` also works in httpx.
+
 Coverage omit patterns live in `backend/.coveragerc`, not on the CLI.
 
 ### Frontend (`frontend/src/`)
 Vitest is configured in `vitest.config.js` with jsdom. Test files sit next to the source they test (`format.test.js` beside `format.js`). Global test setup is in `src/test/setup.js` (imports `@testing-library/jest-dom`).
 
 **`apiFetch` header merging:** options are destructured as `{ headers: callerHeaders, ...rest }` before the fetch call so that `...rest` does not overwrite the merged `headers` object.
+
+**`<dialog>` in jsdom:** `showModal()` is not implemented in jsdom. Stub it in `beforeAll`:
+```js
+beforeAll(() => {
+  HTMLDialogElement.prototype.showModal = vi.fn();
+  HTMLDialogElement.prototype.close = vi.fn();
+});
+```
 
 ## CI / Jenkins
 
@@ -118,6 +170,10 @@ The `Jenkinsfile` runs on a **Kubernetes Cloud** (K3s). Each build gets a pod wi
 
 ## Known Constraints
 
+**Transaction amount sign:** Expenses are stored as **negative numbers**, income as positive. The frontend sends `amount = -Math.abs(value)` for expenses. The API validates `amount != 0` and `-100_000_000 ≤ amount ≤ 100_000_000`. Never use `gt=0` validation on transaction amounts.
+
+**Bulk delete route ordering:** The static route `DELETE /bulk` must be registered **before** the parameterised route `DELETE /{tx_id}` in the router, otherwise FastAPI matches `"bulk"` as the `tx_id` parameter.
+
 **MySQL `NULLS LAST`:** MySQL 8.0 does not support `ORDER BY col ASC NULLS LAST`. Use a CASE workaround:
 ```python
 order_by(case((Model.col == None, 1), else_=0), Model.col.asc())
@@ -128,3 +184,5 @@ order_by(case((Model.col == None, 1), else_=0), Model.col.asc())
 **Table layout in CSVImport:** The review table uses `tableLayout: 'fixed'` + `<colgroup>` to prevent `<select>` elements from expanding column widths beyond their `<th>` hints.
 
 **CORS:** The backend only allows `http://localhost:5173`. If the frontend port changes, update `allow_origins` in `main.py`.
+
+**VSCode Python false positives:** VSCode uses system Python 3.9 which doesn't have FastAPI/SQLAlchemy/Pydantic installed. All "Cannot find module" errors in `.py` files are false positives — the project runs inside Docker using its own venv.

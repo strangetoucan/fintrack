@@ -45,9 +45,10 @@ class TestCreateSubscription:
         r = client.post("/api/subscriptions/", json={"amount": 100.0})
         assert r.status_code == 422
 
-    def test_annual_billing_cycle(self, client):
-        r = _create(client, billing_cycle="annual", amount=3499.0)
-        assert r.json()["billing_cycle"] == "annual"
+    def test_yearly_billing_cycle(self, client):
+        r = _create(client, billing_cycle="yearly", amount=3499.0)
+        assert r.status_code == 201
+        assert r.json()["billing_cycle"] == "yearly"
 
 
 # ── GET /api/subscriptions/ ───────────────────────────────────────────────────
@@ -103,11 +104,12 @@ class TestUpdateSubscription:
     def test_update_multiple_fields(self, client):
         sub_id = _create(client).json()["id"]
         r = client.put(f"/api/subscriptions/{sub_id}", json={
-            "amount": 1299.0, "billing_cycle": "annual", "notes": "Upgraded plan",
+            "amount": 1299.0, "billing_cycle": "yearly", "notes": "Upgraded plan",
         })
+        assert r.status_code == 200
         d = r.json()
         assert d["amount"] == 1299.0
-        assert d["billing_cycle"] == "annual"
+        assert d["billing_cycle"] == "yearly"
         assert d["notes"] == "Upgraded plan"
 
     def test_update_nonexistent_returns_404(self, client):

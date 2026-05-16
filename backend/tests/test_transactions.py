@@ -76,6 +76,14 @@ class TestCreateTransaction:
         assert r.status_code == 201
         assert r.json()["amount"] == -500.0
 
+    def test_zero_amount_returns_422(self, client):
+        r = _create(client, amount=0.0)
+        assert r.status_code == 422
+
+    def test_amount_above_limit_returns_422(self, client):
+        r = _create(client, amount=200_000_000.0)
+        assert r.status_code == 422
+
 
 # ── GET /api/transactions/ ────────────────────────────────────────────────────
 
@@ -156,6 +164,120 @@ class TestDeleteTransaction:
         ids = [t["id"] for t in client.get("/api/transactions/").json()]
         assert id1 in ids
         assert id2 not in ids
+
+
+# ── PUT /api/transactions/{id} ───────────────────────────────────────────────
+
+class TestUpdateTransaction:
+    def _payload(self, **overrides):
+        p = {"date": TODAY, "desc": "Updated", "category": "Food & Dining",
+             "amount": 250.0, "type": "expense"}
+        p.update(overrides)
+        return p
+
+    def test_update_returns_200(self, client):
+        tx_id = _create(client, desc="Old").json()["id"]
+        r = client.put(f"/api/transactions/{tx_id}", json=self._payload())
+        assert r.status_code == 200
+
+    def test_update_changes_fields(self, client):
+        tx_id = _create(client, desc="Old", amount=100.0).json()["id"]
+        r = client.put(f"/api/transactions/{tx_id}", json=self._payload(
+            desc="Dinner", amount=450.0, category="Food & Dining"))
+        d = r.json()
+        assert d["desc"] == "Dinner"
+        assert d["amount"] == 450.0
+        assert d["category"] == "Food & Dining"
+
+    def test_update_returns_updated_resource(self, client):
+        tx_id = _create(client).json()["id"]
+        r = client.put(f"/api/transactions/{tx_id}", json=self._payload(desc="Rent", type="expense"))
+        assert r.json()["id"] == tx_id
+        assert r.json()["desc"] == "Rent"
+
+    def test_update_nonexistent_returns_404(self, client):
+        r = client.put("/api/transactions/9999", json=self._payload())
+        assert r.status_code == 404
+
+    def test_update_type_from_income_to_expense(self, client):
+        tx_id = _create(client, type="income", amount=5000.0, category="Salary").json()["id"]
+        r = client.put(f"/api/transactions/{tx_id}",
+                       json=self._payload(desc="Salary", type="expense", amount=-5000.0))
+        assert r.status_code == 200
+        assert r.json()["type"] == "expense"
+
+    def test_update_invalid_investment_returns_404(self, client):
+        tx_id = _create(client).json()["id"]
+        r = client.put(f"/api/transactions/{tx_id}",
+                       json=self._payload(investment_id=9999))
+        assert r.status_code == 404
+
+    def test_update_zero_amount_returns_422(self, client):
+        tx_id = _create(client).json()["id"]
+        r = client.put(f"/api/transactions/{tx_id}", json=self._payload(amount=0.0))
+        assert r.status_code == 422
+
+    def test_update_links_valid_investment(self, client):
+        inv_id = _create_investment(client)
+        tx_id = _create(client, category="Investment", amount=-1000.0).json()["id"]
+        r = client.put(f"/api/transactions/{tx_id}",
+                       json=self._payload(category="Investment", amount=-1000.0,
+                                          investment_id=inv_id))
+        assert r.status_code == 200
+        assert r.json()["investment_id"] == inv_id
+
+    def test_update_investment_sync_adjusts_invested(self, client):
+        inv_id = _create_investment(client)
+        # Link on create — adds abs(-1000) = 1000 to invested
+        tx_id = _create(client, category="Investment", amount=-1000.0,
+                        investment_id=inv_id).json()["id"]
+        inv_before = next(i for i in client.get("/api/investments/").json() if i["id"] == inv_id)
+        # Change amount to -2000 — undo 1000, apply 2000 → net +1000
+        client.put(f"/api/transactions/{tx_id}",
+                   json=self._payload(category="Investment", amount=-2000.0,
+                                      investment_id=inv_id))
+        inv_after = next(i for i in client.get("/api/investments/").json() if i["id"] == inv_id)
+        assert inv_after["invested"] == inv_before["invested"] + 1000.0
+
+
+# ── DELETE /api/transactions/bulk ─────────────────────────────────────────────
+
+class TestBulkDeleteTransactions:
+    def test_bulk_delete_returns_204(self, client):
+        id1 = _create(client, desc="A").json()["id"]
+        id2 = _create(client, desc="B").json()["id"]
+        r = client.request("DELETE", "/api/transactions/bulk", json={"ids": [id1, id2]})
+        assert r.status_code == 204
+
+    def test_bulk_delete_removes_all_targets(self, client):
+        id1 = _create(client, desc="A").json()["id"]
+        id2 = _create(client, desc="B").json()["id"]
+        id3 = _create(client, desc="C").json()["id"]
+        client.request("DELETE", "/api/transactions/bulk", json={"ids": [id1, id2]})
+        remaining = [t["id"] for t in client.get("/api/transactions/").json()]
+        assert id1 not in remaining
+        assert id2 not in remaining
+        assert id3 in remaining
+
+    def test_bulk_delete_nonexistent_ids_ignored(self, client):
+        id1 = _create(client, desc="Keep").json()["id"]
+        r = client.request("DELETE", "/api/transactions/bulk", json={"ids": [9999, 8888]})
+        assert r.status_code == 204
+        assert len(client.get("/api/transactions/").json()) == 1
+
+    def test_bulk_delete_empty_ids_returns_422(self, client):
+        r = client.request("DELETE", "/api/transactions/bulk", json={"ids": []})
+        assert r.status_code == 422
+
+    def test_bulk_delete_over_500_ids_returns_422(self, client):
+        r = client.request("DELETE", "/api/transactions/bulk",
+                           json={"ids": list(range(1, 502))})
+        assert r.status_code == 422
+
+    def test_bulk_delete_all_returns_empty_list(self, client):
+        ids = [_create(client, desc=f"Tx{i}").json()["id"] for i in range(4)]
+        client.request("DELETE", "/api/transactions/bulk", json={"ids": ids})
+        assert client.get("/api/transactions/").json() == []
 
 
 # ── GET /api/transactions/monthly-summary ────────────────────────────────────
