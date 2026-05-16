@@ -57,6 +57,24 @@ describe('fmt', () => {
       expect(fmt(-150000)).toBe('-₹1.50L');
     });
   });
+
+  describe('decimal places', () => {
+    it('shows paise when non-zero', () => {
+      expect(fmt(1500.50)).toBe('₹1,500.50');
+    });
+    it('pads single-digit paise to two digits', () => {
+      expect(fmt(200.05)).toBe('₹200.05');
+    });
+    it('omits decimal for whole numbers', () => {
+      expect(fmt(1500)).toBe('₹1,500');
+    });
+    it('fixes floating-point drift — the total savings bug', () => {
+      expect(fmt(-24670.329999999958)).toBe('-₹24,670.33');
+    });
+    it('fixes floating-point drift for positive values', () => {
+      expect(fmt(9999.999999999)).toBe('₹10,000');
+    });
+  });
 });
 
 // ── fmtK() ────────────────────────────────────────────────────────────────────
