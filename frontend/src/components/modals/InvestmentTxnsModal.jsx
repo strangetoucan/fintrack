@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAccent } from '../../context/TweakContext';
 import { fetchInvestmentTransactions } from '../../api/investments';
 import { fmt } from '../../utils/format';
@@ -7,6 +7,8 @@ export default function InvestmentTxnsModal({ investment, onClose }) {
   const accent = useAccent();
   const [txns,    setTxns   ] = useState([]);
   const [loading, setLoading] = useState(true);
+  const dlgRef = useRef(null);
+  useEffect(() => { dlgRef.current?.showModal(); }, []);
 
   useEffect(() => {
     fetchInvestmentTransactions(investment.id)
@@ -19,14 +21,12 @@ export default function InvestmentTxnsModal({ investment, onClose }) {
   const totalWithdrawn  = txns.filter((t) => t.type === 'income' ).reduce((s, t) => s + Math.abs(t.amount), 0);
 
   return (
-    <div
-      onClick={onClose}
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+    <dialog
+      ref={dlgRef} onClose={onClose}
+      onClick={(e) => { if (e.target === dlgRef.current) onClose(); }}
+      style={{ padding: 0, border: 'none', background: 'transparent', maxWidth: 'none' }}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 520, background: '#1A1D27', border: '1px solid #2A2D3E', borderRadius: 18, padding: 24, fontFamily: 'DM Sans', color: '#E8EAF0', boxShadow: '0 24px 64px rgba(0,0,0,0.7)', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}
-      >
+      <div style={{ width: '100%', maxWidth: 520, background: '#1A1D27', border: '1px solid #2A2D3E', borderRadius: 18, padding: 24, fontFamily: 'DM Sans', color: '#E8EAF0', boxShadow: '0 24px 64px rgba(0,0,0,0.7)', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20, flexShrink: 0 }}>
           <div>
@@ -100,6 +100,6 @@ export default function InvestmentTxnsModal({ investment, onClose }) {
           ))}
         </div>
       </div>
-    </div>
+    </dialog>
   );
 }

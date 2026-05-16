@@ -12,11 +12,26 @@ import { fmt, fmtK } from '../utils/format';
 import { fetchTransactions } from '../api/transactions';
 import { apiFetch } from '../api/client';
 import { fetchInvestmentSummary } from '../api/investments';
+import { fetchAccountSummary } from '../api/accounts';
 import { useAccent } from '../context/TweakContext';
+import { useSettingsCtx } from '../context/SettingsContext';
 
 function greeting() {
   const h = new Date().getHours();
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
+}
+
+function toYM(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+}
+function addMonths(ym, delta) {
+  const [y, m] = ym.split('-').map(Number);
+  const d = new Date(y, m - 1 + delta, 1);
+  return toYM(d);
+}
+function ymLabel(ym) {
+  const [y, m] = ym.split('-').map(Number);
+  return new Date(y, m - 1, 1).toLocaleString('default', { month: 'long', year: 'numeric' });
 }
 
 const CAT_COLORS = {
@@ -45,19 +60,28 @@ function buildExpCats(transactions) {
   return [...top4, { name: 'Others', value: othersVal, color: '#6B7280' }];
 }
 
-export default function Dashboard() {
+const btnStyle = (active, accent) => ({
+  background: 'none', border: 'none', cursor: 'pointer', padding: '4px 10px',
+  borderRadius: 8, fontSize: 18, color: active ? '#6B7280' : '#374151',
+  lineHeight: 1,
+  ':hover': { color: accent },
+});
+
+export default function Dashboard({ onNavigate }) {
   const accent = useAccent();
+  const { settings } = useSettingsCtx();
   const [showModal,   setShowModal  ] = useState(false);
-  const [recentTxns,  setRecentTxns ] = useState([]);
   const [allTxns,     setAllTxns    ] = useState(null);
   const [monthly,     setMonthly    ] = useState([]);
   const [invSummary,  setInvSummary ] = useState(null);
+  const [acctSummary, setAcctSummary] = useState(null);
 
-  const now = new Date();
-  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const today       = new Date();
+  const currentYM   = toYM(today);
+  const [viewMonth, setViewMonth] = useState(currentYM);
 
   const monthTxns = allTxns
-    ? allTxns.filter(t => t.date.slice(0, 7) === currentMonth)
+    ? allTxns.filter(t => t.date.slice(0, 7) === viewMonth)
     : null;
 
   const totalIncome  = monthTxns ? monthTxns.filter(t => t.type === 'income').reduce((s, t) => s + Math.abs(t.amount), 0) : null;
@@ -65,47 +89,54 @@ export default function Dashboard() {
   const savings      = totalIncome != null ? totalIncome - totalExpense : null;
   const savingsRate  = totalIncome ? ((savings / totalIncome) * 100).toFixed(0) : '0';
   const expCats      = monthTxns ? buildExpCats(monthTxns) : [];
+  const recentTxns   = monthTxns ? [...monthTxns].sort((a, b) => (b.created_at ?? b.date) > (a.created_at ?? a.date) ? 1 : -1).slice(0, 5) : [];
 
-  const chartLabels  = monthly.map(m => m.month.slice(5));
-  const incomeData   = monthly.map(m => m.income);
-  const expenseData  = monthly.map(m => m.expense);
-  const savingsData  = monthly.map(m => m.savings);
+  const chartLabels = monthly.map(m => m.month.slice(5));
+  const incomeData  = monthly.map(m => m.income);
+  const expenseData = monthly.map(m => m.expense);
+  const savingsData = monthly.map(m => m.savings);
+
+  const isCurrentMonth = viewMonth === currentYM;
+  const canGoNext      = !isCurrentMonth;
 
   const loadAll = async () => {
     try {
       const data = await fetchTransactions({ limit: 500 });
       setAllTxns(data);
-      setRecentTxns(data.slice(0, 5));
     } catch {
       setAllTxns([]);
     }
     apiFetch('/transactions/monthly-summary').then(setMonthly).catch(() => {});
     fetchInvestmentSummary().then(setInvSummary).catch(() => {});
+    fetchAccountSummary().then(setAcctSummary).catch(() => {});
   };
 
-  const loadRecent = loadAll;
-
   useEffect(() => { loadAll(); }, []);
+
+  const navBtnStyle = (disabled) => ({
+    background: 'none', border: '1px solid #2A2D3E', borderRadius: 7,
+    cursor: disabled ? 'default' : 'pointer', color: disabled ? '#374151' : '#9CA3AF',
+    padding: '3px 10px', fontSize: 14, lineHeight: 1.4, fontFamily: 'DM Sans',
+    opacity: disabled ? 0.3 : 1,
+  });
 
   return (
     <>
       <div
         className="fade-in"
         style={{
-          padding:       'var(--content-pad, 24px)',
-          overflowY:     'auto',
-          height:        '100%',
-          display:       'flex',
-          flexDirection: 'column',
-          gap:           'var(--content-gap, 14px)',
+          padding: 'var(--content-pad, 24px)', overflowY: 'auto', height: '100%',
+          display: 'flex', flexDirection: 'column', gap: 'var(--content-gap, 14px)',
         }}
       >
         {/* Header */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div>
-            <div style={{ fontSize: 22, fontWeight: 700 }}>{greeting()} 👋</div>
+            <div style={{ fontSize: 22, fontWeight: 700 }}>
+              {greeting()}{settings.userName ? `, ${settings.userName}` : ''} 👋
+            </div>
             <div style={{ color: '#6B7280', fontSize: 13, marginTop: 3 }}>
-              {now.toLocaleString('default', { month: 'long' })} {now.getFullYear()} — Here's your financial snapshot
+              Here's your financial snapshot
             </div>
           </div>
           <AccentButton onClick={() => setShowModal(true)}>
@@ -113,12 +144,47 @@ export default function Dashboard() {
           </AccentButton>
         </div>
 
+        {/* Month navigator */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <button
+            style={navBtnStyle(false)}
+            onClick={() => setViewMonth(m => addMonths(m, -1))}
+          >←</button>
+          <span style={{ fontSize: 14, fontWeight: 600, minWidth: 160, textAlign: 'center', color: '#E8EAF0' }}>
+            {ymLabel(viewMonth)}
+            {isCurrentMonth && (
+              <span style={{ fontSize: 11, color: '#6B7280', marginLeft: 8, fontWeight: 400 }}>current</span>
+            )}
+          </span>
+          <button
+            style={navBtnStyle(!canGoNext)}
+            disabled={!canGoNext}
+            onClick={() => setViewMonth(m => addMonths(m, 1))}
+          >→</button>
+          {!isCurrentMonth && (
+            <button
+              onClick={() => setViewMonth(currentYM)}
+              style={{
+                background: 'none', border: '1px solid #2A2D3E', borderRadius: 7, cursor: 'pointer',
+                color: accent, padding: '3px 10px', fontSize: 11.5, fontFamily: 'DM Sans', fontWeight: 600,
+              }}
+            >Today</button>
+          )}
+        </div>
+
         {/* KPI Row */}
         <div className="kpi-row" style={{ gap: 'var(--content-gap, 14px)' }}>
           <StatCard label="Monthly Income"  value={totalIncome  != null ? fmt(totalIncome)  : '—'} sub={`${monthTxns?.filter(t=>t.type==='income').length ?? 0} transactions`}  trend="up"  />
           <StatCard label="Total Expenses"  value={totalExpense != null ? fmt(totalExpense) : '—'} sub={`${monthTxns?.filter(t=>t.type==='expense').length ?? 0} transactions`} trend="down"/>
-          <StatCard label="Net Savings"     value={savings      != null ? fmt(savings)      : '—'} sub={`${savingsRate}% savings rate`} trend={savings >= 0 ? 'up' : 'down'} />
-          <StatCard label="Net Worth"       value={invSummary ? fmtK(invSummary.total_current) : '—'} sub="Investments current value" trend="up" />
+          <StatCard label="Net Savings"     value={savings != null ? fmt(savings) : '—'} sub={`${savingsRate}% savings rate`} trend={savings >= 0 ? 'up' : 'down'} />
+          <StatCard
+            label="Net Worth"
+            value={(invSummary || acctSummary)
+              ? fmtK((invSummary?.total_current ?? 0) + (acctSummary?.total_balance ?? 0))
+              : '—'}
+            sub="Investments + bank balances"
+            trend="up"
+          />
         </div>
 
         {/* Charts row */}
@@ -127,17 +193,15 @@ export default function Dashboard() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: 15 }}>Income vs Expenses</div>
-                <div style={{ color: '#6B7280', fontSize: 12, marginTop: 2 }}>Monthly breakdown</div>
+                <div style={{ color: '#6B7280', fontSize: 12, marginTop: 2 }}>Monthly — hover to inspect</div>
               </div>
               <div style={{ display: 'flex', gap: 16, fontSize: 12 }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{ width: 10, height: 10, borderRadius: 2, background: '#22C55E', display: 'inline-block' }}/>
-                  <span style={{ color: '#9CA3AF' }}>Income</span>
-                </span>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <span style={{ width: 10, height: 10, borderRadius: 2, background: '#3B82F6', display: 'inline-block' }}/>
-                  <span style={{ color: '#9CA3AF' }}>Expenses</span>
-                </span>
+                {[['#22C55E', 'Income'], ['#3B82F6', 'Expenses']].map(([c, l]) => (
+                  <span key={l} style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <span style={{ width: 10, height: 10, borderRadius: 2, background: c, display: 'inline-block' }} />
+                    <span style={{ color: '#9CA3AF' }}>{l}</span>
+                  </span>
+                ))}
               </div>
             </div>
             {monthly.length > 0 ? (
@@ -149,14 +213,25 @@ export default function Dashboard() {
 
           <Card style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Expense Breakdown</div>
-            <div style={{ color: '#6B7280', fontSize: 12, marginBottom: 16 }}>{now.toLocaleString('default', { month: 'long' })} {now.getFullYear()}</div>
+            <div style={{ color: '#6B7280', fontSize: 12, marginBottom: 16 }}>{ymLabel(viewMonth)}</div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
               {expCats.length > 0 ? (
                 <>
                   <DonutChart segments={expCats} size={130} thickness={24} label={fmt(totalExpense)} sublabel="expenses" />
-                  <div style={{ marginTop: 16, width: '100%', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div style={{ marginTop: 16, width: '100%', display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {expCats.map((c) => (
-                      <div key={c.name} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <div
+                        key={c.name}
+                        onClick={() => onNavigate?.('transactions')}
+                        title="View transactions"
+                        style={{
+                          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+                          padding: '4px 6px', borderRadius: 7, cursor: 'pointer',
+                          transition: 'background 0.12s',
+                        }}
+                        onMouseEnter={(e) => e.currentTarget.style.background = '#1F2333'}
+                        onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+                      >
                         <span style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 12, color: '#9CA3AF' }}>
                           <span style={{ width: 8, height: 8, borderRadius: 2, background: c.color, display: 'inline-block', flexShrink: 0 }} />
                           {c.name}
@@ -177,7 +252,7 @@ export default function Dashboard() {
         <div style={{ display: 'flex', gap: 'var(--content-gap, 14px)' }}>
           <Card style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Monthly Savings</div>
-            <div style={{ color: '#6B7280', fontSize: 12, marginBottom: 12 }}>Net savings trend</div>
+            <div style={{ color: '#6B7280', fontSize: 12, marginBottom: 12 }}>Hover bars to inspect</div>
             {savingsData.length > 0 ? (
               <BarChart data={savingsData} labels={chartLabels} color={accent} height={100} />
             ) : (
@@ -189,25 +264,31 @@ export default function Dashboard() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <div style={{ fontWeight: 600, fontSize: 15 }}>Recent Transactions</div>
               <button
-                onClick={() => setShowModal(true)}
-                style={{ background: 'none', border: 'none', cursor: 'pointer', color: accent, fontSize: 12, fontWeight: 600, fontFamily: 'DM Sans', display: 'flex', alignItems: 'center', gap: 4 }}
+                onClick={() => onNavigate?.('transactions')}
+                style={{ background: 'none', border: 'none', cursor: 'pointer', color: accent, fontSize: 12, fontWeight: 600, fontFamily: 'DM Sans' }}
               >
-                <Icon name="plus" size={12} color={accent} /> Add
+                View all →
               </button>
             </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              {recentTxns.map((t) => (
-                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                  <div>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>{t.desc}</div>
-                    <div style={{ fontSize: 11, color: '#6B7280', marginTop: 1 }}>{t.category}</div>
+            {recentTxns.length === 0 ? (
+              <div style={{ color: '#6B7280', fontSize: 13, textAlign: 'center', paddingTop: 16 }}>
+                No transactions in {ymLabel(viewMonth)}
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {recentTxns.map((t) => (
+                  <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.desc}</div>
+                      <div style={{ fontSize: 11, color: '#6B7280', marginTop: 1 }}>{t.category}</div>
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: t.type === 'income' ? accent : '#EF4444', fontFamily: 'DM Mono', flexShrink: 0 }}>
+                      {t.type === 'income' ? '+' : ''}{fmt(t.amount)}
+                    </span>
                   </div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: t.type === 'income' ? accent : '#EF4444', fontFamily: 'DM Mono' }}>
-                    {t.type === 'income' ? '+' : ''}{fmt(t.amount)}
-                  </span>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            )}
           </Card>
 
           <Card style={{ flex: 1, minWidth: 0 }}>
@@ -239,7 +320,7 @@ export default function Dashboard() {
       {showModal && (
         <AddTransactionModal
           onClose={() => setShowModal(false)}
-          onAdded={loadRecent}
+          onAdded={loadAll}
         />
       )}
     </>

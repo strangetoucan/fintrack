@@ -5,6 +5,7 @@ import Icon from '../components/ui/Icon';
 import AccentButton from '../components/ui/AccentButton';
 import DonutChart from '../components/charts/DonutChart';
 import BudgetCategoryModal from '../components/modals/BudgetCategoryModal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { fmt } from '../utils/format';
 import { fetchBudget, fetchBudgetSummary, deleteBudgetCategory } from '../api/budget';
 
@@ -15,9 +16,10 @@ const btnIcon = {
 };
 
 export default function Budget() {
-  const [cats,    setCats   ] = useState([]);
-  const [summary, setSummary] = useState(null);
-  const [modal,   setModal  ] = useState(null); // null | 'add' | {editing cat}
+  const [cats,       setCats      ] = useState([]);
+  const [summary,    setSummary   ] = useState(null);
+  const [modal,      setModal     ] = useState(null); // null | 'add' | {editing cat}
+  const [confirmDlg, setConfirmDlg] = useState(null);
 
   const load = () => {
     fetchBudget().then(setCats).catch(() => {});
@@ -26,12 +28,11 @@ export default function Budget() {
 
   useEffect(() => { load(); }, []);
 
-  const handleDelete = async (cat) => {
-    if (!window.confirm(`Delete "${cat.name}" budget category?`)) return;
-    try {
-      await deleteBudgetCategory(cat.id);
-      load();
-    } catch { /* noop */ }
+  const handleDelete = (cat) => {
+    setConfirmDlg({
+      message: `Delete "${cat.name}" budget category? This cannot be undone.`,
+      onConfirm: async () => { try { await deleteBudgetCategory(cat.id); load(); } catch { /* noop */ } },
+    });
   };
 
   const totalBudget = summary?.total_budget    ?? cats.reduce((s, c) => s + c.budget, 0);
@@ -144,6 +145,13 @@ export default function Budget() {
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load(); }}
           editing={modal === 'add' ? null : modal}
+        />
+      )}
+      {confirmDlg && (
+        <ConfirmDialog
+          message={confirmDlg.message}
+          onConfirm={() => { confirmDlg.onConfirm(); setConfirmDlg(null); }}
+          onCancel={() => setConfirmDlg(null)}
         />
       )}
     </>

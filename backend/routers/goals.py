@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 
 from database import get_db
@@ -23,21 +23,26 @@ class GoalOut(BaseModel):
 
 
 class GoalCreate(BaseModel):
-    name:     str
-    target:   float
-    current:  float
-    deadline: str
-    color:    str
-    icon:     str
+    name:     str            = Field(min_length=1, max_length=255)
+    target:   float          = Field(gt=0, le=1_000_000_000)
+    current:  float          = Field(ge=0, le=1_000_000_000)
+    deadline: str            = Field(min_length=1, max_length=50)
+    color:    str            = Field(pattern=r'^#[0-9A-Fa-f]{3,6}$')
+    icon:     str            = Field(min_length=1, max_length=10)
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def strip_whitespace(cls, v: str) -> str:
+        return v.strip() if isinstance(v, str) else v
 
 
 class GoalUpdate(BaseModel):
-    name:     Optional[str]   = None
-    target:   Optional[float] = None
-    current:  Optional[float] = None
-    deadline: Optional[str]   = None
-    color:    Optional[str]   = None
-    icon:     Optional[str]   = None
+    name:     Optional[str]   = Field(default=None, min_length=1, max_length=255)
+    target:   Optional[float] = Field(default=None, gt=0, le=1_000_000_000)
+    current:  Optional[float] = Field(default=None, ge=0, le=1_000_000_000)
+    deadline: Optional[str]   = Field(default=None, min_length=1, max_length=50)
+    color:    Optional[str]   = Field(default=None, pattern=r'^#[0-9A-Fa-f]{3,6}$')
+    icon:     Optional[str]   = Field(default=None, min_length=1, max_length=10)
 
 
 class EMIOut(BaseModel):
@@ -52,21 +57,21 @@ class EMIOut(BaseModel):
 
 
 class EMICreate(BaseModel):
-    name:        str
-    bank:        str
-    emi:         float
-    outstanding: float
-    total_loan:  float
-    end_date:    str
+    name:        str   = Field(min_length=1, max_length=255)
+    bank:        str   = Field(min_length=1, max_length=100)
+    emi:         float = Field(gt=0, le=100_000_000)
+    outstanding: float = Field(ge=0, le=1_000_000_000)
+    total_loan:  float = Field(gt=0, le=1_000_000_000)
+    end_date:    str   = Field(min_length=1, max_length=50)
 
 
 class EMIUpdate(BaseModel):
-    name:        Optional[str]   = None
-    bank:        Optional[str]   = None
-    emi:         Optional[float] = None
-    outstanding: Optional[float] = None
-    total_loan:  Optional[float] = None
-    end_date:    Optional[str]   = None
+    name:        Optional[str]   = Field(default=None, min_length=1, max_length=255)
+    bank:        Optional[str]   = Field(default=None, min_length=1, max_length=100)
+    emi:         Optional[float] = Field(default=None, gt=0, le=100_000_000)
+    outstanding: Optional[float] = Field(default=None, ge=0, le=1_000_000_000)
+    total_loan:  Optional[float] = Field(default=None, gt=0, le=1_000_000_000)
+    end_date:    Optional[str]   = Field(default=None, min_length=1, max_length=50)
 
 
 # ── Goals ─────────────────────────────────────────────────────────────────────

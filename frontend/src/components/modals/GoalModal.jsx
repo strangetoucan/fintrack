@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useAccent } from '../../context/TweakContext';
 import { createGoal, updateGoal } from '../../api/goals';
 
@@ -28,6 +28,8 @@ export default function GoalModal({ onClose, onSaved, editing }) {
   const [icon,     setIcon    ] = useState(editing?.icon     ?? PRESET_ICONS[0]);
   const [loading,  setLoading ] = useState(false);
   const [error,    setError   ] = useState('');
+  const dlgRef = useRef(null);
+  useEffect(() => { dlgRef.current?.showModal(); }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -52,14 +54,12 @@ export default function GoalModal({ onClose, onSaved, editing }) {
   };
 
   return (
-    <div
-      onClick={onClose}
-      style={{ position: 'fixed', inset: 0, zIndex: 1000, background: 'rgba(0,0,0,0.65)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}
+    <dialog
+      ref={dlgRef} onClose={onClose}
+      onClick={(e) => { if (e.target === dlgRef.current) onClose(); }}
+      style={{ padding: 0, border: 'none', background: 'transparent', maxWidth: 'none' }}
     >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        style={{ width: '100%', maxWidth: 440, background: '#1A1D27', border: '1px solid #2A2D3E', borderRadius: 18, padding: 24, fontFamily: 'DM Sans', color: '#E8EAF0', boxShadow: '0 24px 64px rgba(0,0,0,0.7)', maxHeight: '90vh', overflowY: 'auto' }}
-      >
+      <div style={{ width: '100%', maxWidth: 440, background: '#1A1D27', border: '1px solid #2A2D3E', borderRadius: 18, padding: 24, fontFamily: 'DM Sans', color: '#E8EAF0', boxShadow: '0 24px 64px rgba(0,0,0,0.7)', maxHeight: '90vh', overflowY: 'auto' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 22 }}>
           <div style={{ fontSize: 17, fontWeight: 700 }}>{isEdit ? 'Edit Goal' : 'New Savings Goal'}</div>
           <button onClick={onClose} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', fontSize: 22, lineHeight: 1, padding: '0 4px' }}>×</button>
@@ -139,6 +139,6 @@ export default function GoalModal({ onClose, onSaved, editing }) {
           </div>
         </form>
       </div>
-    </div>
+    </dialog>
   );
 }

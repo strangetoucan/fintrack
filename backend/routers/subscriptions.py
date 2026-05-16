@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import case
-from pydantic import BaseModel
-from typing import Optional
+from pydantic import BaseModel, Field, field_validator
+from typing import Optional, Literal
 
 from database import get_db
 from models import Subscription as SubModel
@@ -25,23 +25,28 @@ class SubscriptionOut(BaseModel):
 
 
 class SubscriptionCreate(BaseModel):
-    name:          str
-    amount:        float
-    billing_cycle: str = "monthly"
-    category:      str = "Other"
-    next_billing:  Optional[str] = None
-    status:        str = "active"
-    notes:         Optional[str] = None
+    name:          str                                                  = Field(min_length=1, max_length=255)
+    amount:        float                                                = Field(gt=0, le=100_000_000)
+    billing_cycle: Literal["monthly", "quarterly", "half_yearly", "yearly"] = "monthly"
+    category:      str                                                  = Field(default="Other", min_length=1, max_length=100)
+    next_billing:  Optional[str]                                        = Field(default=None, max_length=50)
+    status:        Literal["active", "paused", "cancelled"]            = "active"
+    notes:         Optional[str]                                        = Field(default=None, max_length=500)
+
+    @field_validator("name", "category", mode="before")
+    @classmethod
+    def strip_whitespace(cls, v: str) -> str:
+        return v.strip() if isinstance(v, str) else v
 
 
 class SubscriptionUpdate(BaseModel):
-    name:          Optional[str]   = None
-    amount:        Optional[float] = None
-    billing_cycle: Optional[str]   = None
-    category:      Optional[str]   = None
-    next_billing:  Optional[str]   = None
-    status:        Optional[str]   = None
-    notes:         Optional[str]   = None
+    name:          Optional[str]                                                         = Field(default=None, min_length=1, max_length=255)
+    amount:        Optional[float]                                                       = Field(default=None, gt=0, le=100_000_000)
+    billing_cycle: Optional[Literal["monthly", "quarterly", "half_yearly", "yearly"]]   = None
+    category:      Optional[str]                                                         = Field(default=None, min_length=1, max_length=100)
+    next_billing:  Optional[str]                                                         = Field(default=None, max_length=50)
+    status:        Optional[Literal["active", "paused", "cancelled"]]                   = None
+    notes:         Optional[str]                                                         = Field(default=None, max_length=500)
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────

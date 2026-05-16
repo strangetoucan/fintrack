@@ -31,6 +31,14 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    develop:
+      watch:
+        - path: .
+          action: rebuild
+          ignore:
+            - "*.db"
+            - "*__pycache__*"
+            - "*.pyc"
     env_file:
       - .env
     environment:

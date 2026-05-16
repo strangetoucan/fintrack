@@ -5,6 +5,7 @@ import Icon from '../components/ui/Icon';
 import AccentButton from '../components/ui/AccentButton';
 import GoalModal from '../components/modals/GoalModal';
 import EMIModal from '../components/modals/EMIModal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { fmt } from '../utils/format';
 import { fetchGoals, deleteGoal, fetchEmis, deleteEmi } from '../api/goals';
 import { useAccent } from '../context/TweakContext';
@@ -20,6 +21,7 @@ export default function Goals() {
   const [emis,       setEmis      ] = useState([]);
   const [goalModal,  setGoalModal ] = useState(null); // null | 'add' | {editing goal}
   const [emiModal,   setEmiModal  ] = useState(null); // null | 'add' | {editing emi}
+  const [confirmDlg, setConfirmDlg] = useState(null);
 
   const load = () => {
     fetchGoals().then(setGoals).catch(() => {});
@@ -28,14 +30,18 @@ export default function Goals() {
 
   useEffect(() => { load(); }, []);
 
-  const handleDeleteGoal = async (g) => {
-    if (!window.confirm(`Delete goal "${g.name}"?`)) return;
-    try { await deleteGoal(g.id); load(); } catch { /* noop */ }
+  const handleDeleteGoal = (g) => {
+    setConfirmDlg({
+      message: `Delete goal "${g.name}"? This cannot be undone.`,
+      onConfirm: async () => { try { await deleteGoal(g.id); load(); } catch { /* noop */ } },
+    });
   };
 
-  const handleDeleteEmi = async (e) => {
-    if (!window.confirm(`Delete "${e.name}"?`)) return;
-    try { await deleteEmi(e.id); load(); } catch { /* noop */ }
+  const handleDeleteEmi = (e) => {
+    setConfirmDlg({
+      message: `Delete "${e.name}"? This cannot be undone.`,
+      onConfirm: async () => { try { await deleteEmi(e.id); load(); } catch { /* noop */ } },
+    });
   };
 
   return (
@@ -204,6 +210,13 @@ export default function Goals() {
           onClose={() => setEmiModal(null)}
           onSaved={() => { setEmiModal(null); load(); }}
           editing={emiModal === 'add' ? null : emiModal}
+        />
+      )}
+      {confirmDlg && (
+        <ConfirmDialog
+          message={confirmDlg.message}
+          onConfirm={() => { confirmDlg.onConfirm(); setConfirmDlg(null); }}
+          onCancel={() => setConfirmDlg(null)}
         />
       )}
     </>

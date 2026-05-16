@@ -6,6 +6,7 @@ import AccentButton from '../components/ui/AccentButton';
 import Icon from '../components/ui/Icon';
 import DonutChart from '../components/charts/DonutChart';
 import SubscriptionModal from '../components/modals/SubscriptionModal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { fmt } from '../utils/format';
 import { fetchSubscriptions, deleteSubscription } from '../api/subscriptions';
 import { useAccent } from '../context/TweakContext';
@@ -39,9 +40,10 @@ function daysUntil(dateStr) {
 const btnIcon = { background: 'none', border: 'none', cursor: 'pointer', padding: '4px 6px', borderRadius: 6, lineHeight: 1, transition: 'color 0.15s' };
 
 export default function Subscriptions() {
-  const [subs,   setSubs  ] = useState([]);
-  const [modal,  setModal ] = useState(null);   // null | 'add' | {editing sub}
-  const [filter, setFilter] = useState('active');
+  const [subs,       setSubs      ] = useState([]);
+  const [modal,      setModal     ] = useState(null);   // null | 'add' | {editing sub}
+  const [filter,     setFilter    ] = useState('active');
+  const [confirmDlg, setConfirmDlg] = useState(null);
   const accent = useAccent();
 
   const load = () => fetchSubscriptions().then(setSubs).catch(() => {});
@@ -63,9 +65,11 @@ export default function Subscriptions() {
     .sort((a, b) => b[1] - a[1])
     .map(([name, value]) => ({ name, value, color: CAT_COLOR[name] || '#6B7280' }));
 
-  const handleDelete = async (sub) => {
-    if (!window.confirm(`Delete "${sub.name}"?`)) return;
-    try { await deleteSubscription(sub.id); load(); } catch { /* noop */ }
+  const handleDelete = (sub) => {
+    setConfirmDlg({
+      message: `Delete "${sub.name}"? This cannot be undone.`,
+      onConfirm: async () => { try { await deleteSubscription(sub.id); load(); } catch { /* noop */ } },
+    });
   };
 
   return (
@@ -287,6 +291,13 @@ export default function Subscriptions() {
           onClose={() => setModal(null)}
           onSaved={() => { setModal(null); load(); }}
           editing={modal === 'add' ? null : modal}
+        />
+      )}
+      {confirmDlg && (
+        <ConfirmDialog
+          message={confirmDlg.message}
+          onConfirm={() => { confirmDlg.onConfirm(); setConfirmDlg(null); }}
+          onCancel={() => setConfirmDlg(null)}
         />
       )}
     </>

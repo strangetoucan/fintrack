@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query, HTTPException
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 
 from database import get_db
@@ -21,20 +21,25 @@ class InvestmentOut(BaseModel):
 
 
 class InvestmentCreate(BaseModel):
-    name:     str
-    type:     str
-    platform: str
-    invested: float
-    current:  float
-    sip:      Optional[float] = None
+    name:     str            = Field(min_length=1, max_length=255)
+    type:     str            = Field(min_length=1, max_length=20)
+    platform: str            = Field(min_length=1, max_length=100)
+    invested: float          = Field(ge=0, le=1_000_000_000)
+    current:  float          = Field(ge=0, le=1_000_000_000)
+    sip:      Optional[float] = Field(default=None, ge=0, le=10_000_000)
+
+    @field_validator("name", "platform", mode="before")
+    @classmethod
+    def strip_whitespace(cls, v: str) -> str:
+        return v.strip() if isinstance(v, str) else v
 
 
 class InvestmentUpdate(BaseModel):
-    name:     Optional[str]   = None
-    platform: Optional[str]   = None
-    invested: Optional[float] = None
-    current:  Optional[float] = None
-    sip:      Optional[float] = None
+    name:     Optional[str]   = Field(default=None, min_length=1, max_length=255)
+    platform: Optional[str]   = Field(default=None, min_length=1, max_length=100)
+    invested: Optional[float] = Field(default=None, ge=0, le=1_000_000_000)
+    current:  Optional[float] = Field(default=None, ge=0, le=1_000_000_000)
+    sip:      Optional[float] = Field(default=None, ge=0, le=10_000_000)
 
 
 def _to_out(inv: InvestmentModel) -> dict:

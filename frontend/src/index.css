@@ -103,3 +103,18 @@ input[type="date"]::-webkit-calendar-picker-indicator { filter: invert(0.6); cur
 
 /* Modal focus ring */
 .modal-input:focus { border-color: var(--accent, #6366F1) !important; outline: none; }
+
+/* Native <dialog> modals */
+dialog {
+  padding: 0;
+  border: none;
+  background: transparent;
+  max-width: none;
+  overflow: visible;
+  margin: auto;
+}
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+}

@@ -1,5 +1,5 @@
 import enum
-from sqlalchemy import Column, Integer, String, Numeric, Date, DateTime, Enum as SAEnum, ForeignKey, func
+from sqlalchemy import Column, Integer, String, Numeric, Date, DateTime, Boolean, Enum as SAEnum, ForeignKey, func
 from sqlalchemy.orm import relationship
 from database import Base
 
@@ -20,6 +20,7 @@ class Transaction(Base):
     type          = Column(SAEnum(TxType), nullable=False)
     investment_id = Column(Integer, ForeignKey("investments.id", ondelete="SET NULL"), nullable=True)
     investment    = relationship("Investment", backref="transactions", lazy="joined")
+    tags          = Column(String(500), nullable=True)
     created_at    = Column(DateTime, server_default=func.now(), nullable=False)
 
 
@@ -79,3 +80,41 @@ class Subscription(Base):
     next_billing  = Column(String(50), nullable=True)
     status        = Column(String(20), nullable=False, default="active")
     notes         = Column(String(500), nullable=True)
+
+
+class UserSettings(Base):
+    __tablename__ = "user_settings"
+
+    id             = Column(Integer, primary_key=True, default=1)
+    user_name      = Column(String(100), nullable=False, default='')
+    financial_year = Column(String(20),  nullable=False, default='calendar')
+    palette        = Column(String(20),  nullable=False, default='indigo')
+    surface        = Column(String(20),  nullable=False, default='frosted')
+    density        = Column(String(20),  nullable=False, default='balanced')
+
+
+class RecurringTransaction(Base):
+    __tablename__ = "recurring_transactions"
+
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    desc          = Column(String(255), nullable=False)
+    category      = Column(String(100), nullable=False)
+    amount        = Column(Numeric(12, 2), nullable=False)
+    type          = Column(SAEnum(TxType), nullable=False)
+    investment_id = Column(Integer, ForeignKey("investments.id", ondelete="SET NULL"), nullable=True)
+    day_of_month  = Column(Integer, nullable=False, default=1)
+    active        = Column(Boolean, nullable=False, default=True)
+    tags          = Column(String(500), nullable=True)
+
+
+class BankAccount(Base):
+    __tablename__ = "bank_accounts"
+
+    id           = Column(Integer, primary_key=True, autoincrement=True)
+    name         = Column(String(255), nullable=False)
+    bank_name    = Column(String(100), nullable=False)
+    account_type = Column(String(30), nullable=False, default="savings")
+    balance      = Column(Numeric(14, 2), nullable=False, default=0)
+    color        = Column(String(20), nullable=False, default="#3B82F6")
+    notes        = Column(String(500), nullable=True)
+    updated_at   = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)

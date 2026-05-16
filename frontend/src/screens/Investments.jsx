@@ -8,6 +8,7 @@ import AreaChart from '../components/charts/AreaChart';
 import DonutChart from '../components/charts/DonutChart';
 import InvestmentModal from '../components/modals/InvestmentModal';
 import InvestmentTxnsModal from '../components/modals/InvestmentTxnsModal';
+import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { fmt, fmtK } from '../utils/format';
 import { fetchInvestments, fetchInvestmentSummary, deleteInvestment } from '../api/investments';
 import { fetchTransactions } from '../api/transactions';
@@ -26,8 +27,9 @@ export default function Investments() {
   const [invs,     setInvs    ] = useState([]);
   const [summary,  setSummary ] = useState(null);
   const [growth,   setGrowth  ] = useState({ labels: [], data: [] });
-  const [modal,    setModal   ] = useState(null);    // null | 'add' | {editing inv}
-  const [txnModal, setTxnModal] = useState(null);   // null | {investment}
+  const [modal,      setModal     ] = useState(null);    // null | 'add' | {editing inv}
+  const [txnModal,   setTxnModal  ] = useState(null);    // null | {investment}
+  const [confirmDlg, setConfirmDlg] = useState(null);
   const accent = useAccent();
 
   const load = () => {
@@ -50,9 +52,11 @@ export default function Investments() {
     }).catch(() => {});
   }, []);
 
-  const handleDelete = async (inv) => {
-    if (!window.confirm(`Delete "${inv.name}"?`)) return;
-    try { await deleteInvestment(inv.id); load(); } catch { /* noop */ }
+  const handleDelete = (inv) => {
+    setConfirmDlg({
+      message: `Delete "${inv.name}"? This cannot be undone.`,
+      onConfirm: async () => { try { await deleteInvestment(inv.id); load(); } catch { /* noop */ } },
+    });
   };
 
   const filtered   = tab === 'all' ? invs : invs.filter((i) => i.type === tab);
@@ -233,6 +237,13 @@ export default function Investments() {
         <InvestmentTxnsModal
           investment={txnModal}
           onClose={() => setTxnModal(null)}
+        />
+      )}
+      {confirmDlg && (
+        <ConfirmDialog
+          message={confirmDlg.message}
+          onConfirm={() => { confirmDlg.onConfirm(); setConfirmDlg(null); }}
+          onCancel={() => setConfirmDlg(null)}
         />
       )}
     </>

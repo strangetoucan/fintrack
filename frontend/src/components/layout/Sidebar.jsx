@@ -8,8 +8,10 @@ const NAV = [
   { id: 'investments',  label: 'Investments',  icon: 'investments'  },
   { id: 'goals',        label: 'Goals & EMIs', icon: 'goals'        },
   { id: 'subscriptions', label: 'Subscriptions', icon: 'subscriptions' },
+  { id: 'accounts',     label: 'Accounts',     icon: 'accounts'     },
   { id: 'import',       label: 'CSV Import',   icon: 'import'       },
   { id: 'reports',      label: 'Reports',      icon: 'reports'      },
+  { id: 'settings',     label: 'Settings',     icon: 'settings'     },
 ];
 
 export { NAV };

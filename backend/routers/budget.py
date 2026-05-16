@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional
 from datetime import date
 
@@ -20,14 +20,19 @@ class BudgetCategoryOut(BaseModel):
 
 
 class BudgetCategoryCreate(BaseModel):
-    name:   str
-    budget: float
-    color:  str
+    name:   str   = Field(min_length=1, max_length=100)
+    budget: float = Field(gt=0, le=100_000_000)
+    color:  str   = Field(pattern=r'^#[0-9A-Fa-f]{3,6}$')
+
+    @field_validator("name", mode="before")
+    @classmethod
+    def strip_whitespace(cls, v: str) -> str:
+        return v.strip() if isinstance(v, str) else v
 
 
 class BudgetCategoryUpdate(BaseModel):
-    budget: float
-    color:  Optional[str] = None
+    budget: float          = Field(gt=0, le=100_000_000)
+    color:  Optional[str]  = Field(default=None, pattern=r'^#[0-9A-Fa-f]{3,6}$')
 
 
 def _spent_map(db: Session) -> dict:

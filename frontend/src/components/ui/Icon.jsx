@@ -99,6 +99,15 @@ const paths = {
       <line x1="14" y1="15" x2="17" y2="15"/>
     </>
   ),
+  accounts: (
+    <>
+      <rect x="2" y="5" width="20" height="14" rx="2"/>
+      <path d="M2 10h20"/>
+      <circle cx="7" cy="15" r="1.5" fill="currentColor" stroke="none"/>
+      <line x1="11" y1="15" x2="17" y2="15"/>
+    </>
+  ),
+  edit: <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z"/>,
 };
 
 export default function Icon({ name, size = 18, color = 'currentColor' }) {
