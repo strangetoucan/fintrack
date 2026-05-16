@@ -67,6 +67,16 @@ export default function AreaChart({
           <stop offset="0%"   stopColor={color2} stopOpacity="0.25" />
           <stop offset="100%" stopColor={color2} stopOpacity="0.02" />
         </linearGradient>
+        <clipPath id={`${uid}clip`}>
+          <rect
+            x={pad.l} y={0} width={chartW} height={h}
+            style={{
+              transformBox:    'fill-box',
+              transformOrigin: 'left',
+              animation:       'chartReveal 0.7s cubic-bezier(0.4, 0, 0.2, 1) forwards',
+            }}
+          />
+        </clipPath>
       </defs>
 
       {yTicks.map((v, i) => (
@@ -78,14 +88,16 @@ export default function AreaChart({
         </g>
       ))}
 
-      {data2 && <path d={areaPath(data2)} fill={`url(#${uid}g2)`} />}
-      <path d={areaPath(data1)} fill={`url(#${uid}g1)`} />
-      {data2 && (
-        <polyline points={pts(data2)} fill="none" stroke={color2} strokeWidth="2" strokeLinejoin="round"
+      <g clipPath={`url(#${uid}clip)`}>
+        {data2 && <path d={areaPath(data2)} fill={`url(#${uid}g2)`} />}
+        <path d={areaPath(data1)} fill={`url(#${uid}g1)`} />
+        {data2 && (
+          <polyline points={pts(data2)} fill="none" stroke={color2} strokeWidth="2" strokeLinejoin="round"
+            opacity={hoverIdx !== null ? 0.5 : 1} />
+        )}
+        <polyline points={pts(data1)} fill="none" stroke={color1} strokeWidth="2.5" strokeLinejoin="round"
           opacity={hoverIdx !== null ? 0.5 : 1} />
-      )}
-      <polyline points={pts(data1)} fill="none" stroke={color1} strokeWidth="2.5" strokeLinejoin="round"
-        opacity={hoverIdx !== null ? 0.5 : 1} />
+      </g>
 
       {labels.map((l, i) => (
         <text key={i} x={pad.l + i * xStep} y={h - 6} fill="#6B7280" fontSize="9.5" textAnchor="middle" fontFamily="DM Sans">

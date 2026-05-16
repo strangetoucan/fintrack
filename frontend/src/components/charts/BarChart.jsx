@@ -49,6 +49,11 @@ export default function BarChart({ data, labels, color = '#22C55E', height = 100
               x={x} y={y} width={barW} height={bh} rx="3"
               fill={barColor}
               opacity={hoverIdx === null || isHov ? 0.85 : 0.3}
+              style={{
+                transformBox:   'fill-box',
+                transformOrigin: 'center bottom',
+                animation: `barGrow 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) ${i * 0.07}s both`,
+              }}
             />
             {isHov && (
               <g>

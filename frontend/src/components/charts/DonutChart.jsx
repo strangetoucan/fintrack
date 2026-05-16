@@ -40,7 +40,11 @@ export default function DonutChart({ segments, size = 120, thickness = 22, label
             strokeDasharray={`${Math.max(0, arc.dash - 1.5)} ${arc.gap + 1.5}`}
             strokeDashoffset={-arc.offset}
             transform={`rotate(-90 ${cx} ${cy})`}
-            style={{ cursor: 'pointer', transition: 'stroke-width 0.15s' }}
+            style={{
+              cursor: 'pointer',
+              transition: 'stroke-width 0.15s',
+              animation: `arcIn 0.4s ease ${i * 0.1}s both`,
+            }}
             onMouseEnter={() => setHoverIdx(i)}
             onMouseLeave={() => setHoverIdx(null)}
           />
