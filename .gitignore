@@ -5,3 +5,4 @@
 dist/
 .env
 backend/test_finance.db
+reports/

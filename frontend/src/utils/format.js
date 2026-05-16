@@ -15,7 +15,10 @@ export const fmt = (n) => {
   return (n < 0 ? '-₹' : '₹') + res + dec;
 };
 
-export const fmtK = (n) =>
-  n >= 1e5 ? '₹' + (n / 1e5).toFixed(1) + 'L' :
-  n >= 1000 ? '₹' + (n / 1000).toFixed(0) + 'K' :
-  '₹' + n;
+export const fmtK = (n) => {
+  const abs  = Math.abs(n);
+  const sign = n < 0 ? '-' : '';
+  if (abs >= 1e5)  return sign + '₹' + (abs / 1e5).toFixed(1) + 'L';
+  if (abs >= 1000) return sign + '₹' + Math.round(abs / 1000) + 'K';
+  return sign + '₹' + Math.round(abs);
+};

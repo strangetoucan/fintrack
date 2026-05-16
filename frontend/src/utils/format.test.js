@@ -112,4 +112,22 @@ describe('fmtK', () => {
       expect(fmtK(999)).toBe('₹999');
     });
   });
+
+  describe('negative values', () => {
+    it('formats negative K value', () => {
+      expect(fmtK(-15000)).toBe('-₹15K');
+    });
+    it('formats negative lakh value', () => {
+      expect(fmtK(-250000)).toBe('-₹2.5L');
+    });
+    it('formats negative sub-1000 value', () => {
+      expect(fmtK(-500)).toBe('-₹500');
+    });
+    it('fixes floating-point drift — the total savings bug', () => {
+      expect(fmtK(-24670.329999999958)).toBe('-₹25K');
+    });
+    it('does not produce raw number string for negative values', () => {
+      expect(fmtK(-24670.329999999958)).not.toContain('329999');
+    });
+  });
 });
