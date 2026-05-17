@@ -50,9 +50,11 @@ dialog[open] > div {
 }
 
 /* Responsive layout helpers */
-.kpi-row  { display: flex; gap: 14px; }
+.kpi-row   { display: flex; gap: 14px; }
 .chart-row { display: flex; gap: 14px; }
-.two-col  { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.two-col   { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.bottom-row { display: flex; gap: 14px; flex-wrap: wrap; }
+.bottom-row > * { flex: 1; min-width: min(260px, 100%); }
 
 @media (max-width: 900px) {
   .kpi-row   { display: grid; grid-template-columns: 1fr 1fr; }
@@ -68,6 +70,10 @@ dialog[open] > div {
 }
 @media (max-width: 600px) {
   .budget-grid { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 480px) {
+  .bottom-row > * { min-width: 100%; }
+  dialog > div { max-width: calc(100vw - 24px) !important; width: calc(100vw - 24px) !important; }
 }
 
 /* Sidebar */
@@ -98,13 +104,15 @@ dialog[open] > div {
 .bottom-nav {
   display: none;
   position: fixed; bottom: 0; left: 0; right: 0;
-  height: 60px; z-index: 200;
+  height: calc(60px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  z-index: 200;
   border-top: 1px solid #2A2D3E;
   background: #13161F;
 }
 @media (max-width: 768px) {
   .bottom-nav { display: flex; }
-  .main-scroll-area { padding-bottom: 72px !important; }
+  .main-scroll-area { padding-bottom: calc(72px + env(safe-area-inset-bottom, 0px)) !important; }
 }
 
 /* Hamburger */

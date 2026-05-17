@@ -125,7 +125,7 @@ export default function Topbar({ onMenuClick, onNavigate, isMobile }) {
               placeholder="Search everything…"
               style={{
                 background: 'none', border: 'none', outline: 'none',
-                color: '#E8EAF0', fontSize: 13, width: 160, fontFamily: 'inherit',
+                color: '#E8EAF0', fontSize: 13, width: 'clamp(80px, 16vw, 160px)', fontFamily: 'inherit',
               }}
             />
             {query && (
@@ -140,7 +140,7 @@ export default function Topbar({ onMenuClick, onNavigate, isMobile }) {
           {open && results.length > 0 && (
             <div style={{
               position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-              width: 360, background: '#1A1D27',
+              width: 'min(360px, calc(100vw - 32px))', background: '#1A1D27',
               border: '1px solid #2A2D3E', borderRadius: 14,
               boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
               zIndex: 999, overflow: 'hidden',
@@ -202,7 +202,7 @@ export default function Topbar({ onMenuClick, onNavigate, isMobile }) {
           {open && query && results.length === 0 && !loading && (
             <div style={{
               position: 'absolute', top: 'calc(100% + 8px)', right: 0,
-              width: 260, background: '#1A1D27', border: '1px solid #2A2D3E',
+              width: 'min(260px, calc(100vw - 32px))', background: '#1A1D27', border: '1px solid #2A2D3E',
               borderRadius: 14, padding: '16px', textAlign: 'center',
               color: '#6B7280', fontSize: 13, boxShadow: '0 16px 48px rgba(0,0,0,0.6)',
             }}>

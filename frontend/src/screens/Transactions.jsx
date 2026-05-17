@@ -1,4 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
+
+const useIsMobile = () => {
+  const [w, setW] = useState(window.innerWidth);
+  useEffect(() => {
+    const fn = () => setW(window.innerWidth);
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, []);
+  return w <= 640;
+};
 import Card from '../components/ui/Card';
 import StatCard from '../components/ui/StatCard';
 import Icon from '../components/ui/Icon';
@@ -42,6 +52,7 @@ function exportCSV(rows) {
 
 export default function Transactions() {
   const accent = useAccent();
+  const isMobile = useIsMobile();
 
   // filter state
   const [search,    setSearch   ] = useState('');
@@ -187,7 +198,7 @@ export default function Transactions() {
         style={{ padding: 'var(--content-pad,24px)', height: '100%', overflowY: 'auto', display: 'flex', flexDirection: 'column', gap: 'var(--content-gap,14px)' }}
       >
         {/* Header */}
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
           <div>
             <div style={{ fontSize: 22, fontWeight: 700 }}>Transactions</div>
             <div style={{ color: '#6B7280', fontSize: 13, marginTop: 3 }}>
@@ -196,8 +207,8 @@ export default function Transactions() {
                 : 'All income & expense entries'}
             </div>
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            {activeTab === 'transactions' && rows.length > 0 && (
+          <div style={{ display: 'flex', gap: 10, flexShrink: 0 }}>
+            {activeTab === 'transactions' && rows.length > 0 && !isMobile && (
               <button
                 onClick={() => exportCSV(sortedRows)}
                 style={{
@@ -380,7 +391,112 @@ export default function Transactions() {
               <div style={{ textAlign: 'center', padding: '32px 0', color: '#6B7280', fontSize: 13 }}>Loading…</div>
             )}
 
-            {!loading && (
+            {!loading && isMobile && (
+              <div>
+                {/* Mobile select-all row */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 0', borderBottom: '1px solid #2A2D3E', marginBottom: 4 }}>
+                  <input
+                    type="checkbox"
+                    checked={allVisibleSelected}
+                    ref={(el) => { if (el) el.indeterminate = someSelected; }}
+                    onChange={toggleSelectAll}
+                    style={{ cursor: 'pointer', accentColor: accent, width: 14, height: 14 }}
+                  />
+                  <span style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                    Select all · {sortedRows.length} entries
+                  </span>
+                  <button
+                    onClick={() => toggleSort('date')}
+                    style={{ marginLeft: 'auto', background: 'none', border: 'none', cursor: 'pointer', fontSize: 11, color: sortBy === 'date' ? '#E8EAF0' : '#6B7280', display: 'flex', alignItems: 'center', gap: 3 }}
+                  >
+                    Date {sortBy === 'date' && <span>{sortDir === 'desc' ? '↓' : '↑'}</span>}
+                  </button>
+                </div>
+
+                {sortedRows.length === 0 && (
+                  <div style={{ padding: '32px 0', textAlign: 'center', color: '#6B7280', fontSize: 13 }}>
+                    {hasFilters ? 'No transactions match these filters.' : 'No transactions yet.'}
+                  </div>
+                )}
+
+                {sortedRows.map((t) => {
+                  const txTags  = t.tags ? t.tags.split(',').map((s) => s.trim()).filter(Boolean) : [];
+                  const isChecked = selected.has(t.id);
+                  return (
+                    <div key={t.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '12px 0', borderBottom: '1px solid #1E2130' }}>
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={() => toggleSelect(t.id)}
+                        style={{ cursor: 'pointer', accentColor: accent, width: 14, height: 14, marginTop: 9, flexShrink: 0 }}
+                      />
+                      <div style={{
+                        width: 32, height: 32, borderRadius: 8, flexShrink: 0, marginTop: 2,
+                        background: t.type === 'income' ? accent + '22' : 'rgba(239,68,68,0.15)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      }}>
+                        <Icon name={t.type === 'income' ? 'up' : 'down'} size={14} color={t.type === 'income' ? accent : '#EF4444'} />
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                          <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1 }}>
+                            {t.desc}
+                          </div>
+                          <span style={{ fontFamily: 'DM Mono', fontWeight: 700, fontSize: 13, color: t.type === 'income' ? accent : '#EF4444', flexShrink: 0 }}>
+                            {t.type === 'income' ? '+' : ''}{fmt(t.amount)}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 5, gap: 8 }}>
+                          <div style={{ display: 'flex', gap: 6, alignItems: 'center', minWidth: 0, flex: 1 }}>
+                            <span style={{
+                              fontSize: 10.5, fontWeight: 600, padding: '2px 7px', borderRadius: 99,
+                              background: '#1F2333', color: '#9CA3AF', border: '1px solid #2A2D3E',
+                              whiteSpace: 'nowrap', flexShrink: 0,
+                            }}>{t.category}</span>
+                            <span style={{ fontSize: 11, color: '#6B7280', whiteSpace: 'nowrap' }}>
+                              {typeof t.date === 'string' ? t.date : new Date(t.date).toISOString().slice(0, 10)}
+                            </span>
+                          </div>
+                          <div style={{ display: 'flex', gap: 2, flexShrink: 0 }}>
+                            <button
+                              onClick={() => { setPrefill(t); setShowModal(true); }} title="Edit"
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', padding: '4px 6px', borderRadius: 6 }}
+                            ><Icon name="edit" size={13} color="currentColor" /></button>
+                            <button
+                              onClick={() => handleDelete(t.id)} title="Delete"
+                              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#6B7280', padding: '4px 6px', borderRadius: 6, fontSize: 16, lineHeight: 1 }}
+                            >×</button>
+                          </div>
+                        </div>
+                        {t.investment_name && (
+                          <div style={{ fontSize: 11, color: '#6B7280', marginTop: 4, display: 'flex', alignItems: 'center', gap: 4 }}>
+                            <span style={{ fontSize: 10 }}>📈</span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.investment_name}</span>
+                          </div>
+                        )}
+                        {txTags.length > 0 && (
+                          <div style={{ display: 'flex', gap: 4, marginTop: 4, flexWrap: 'wrap' }}>
+                            {txTags.map((tag) => (
+                              <span
+                                key={tag}
+                                onClick={() => setTagFilter(tag)}
+                                style={{
+                                  fontSize: 10.5, padding: '1px 7px', borderRadius: 99,
+                                  background: accent + '18', color: accent,
+                                  cursor: 'pointer', fontWeight: 600,
+                                }}
+                              >#{tag}</span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {!loading && !isMobile && (
               <div style={{ overflowX: 'auto' }}>
                 <div style={{ display: 'grid', gridTemplateColumns: '32px 1fr 130px 150px 110px 68px', minWidth: 520 }}>
                   {/* Select-all checkbox */}
@@ -592,8 +708,8 @@ export default function Transactions() {
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexShrink: 0 }}>
-                      <span style={{ fontFamily: 'DM Mono', fontWeight: 700, fontSize: 13.5, color: rec.type === 'income' ? accent : '#EF4444' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                      <span style={{ fontFamily: 'DM Mono', fontWeight: 700, fontSize: 13.5, color: rec.type === 'income' ? accent : '#EF4444', marginRight: 4 }}>
                         {rec.type === 'income' ? '+' : '-'}{fmt(rec.amount)}
                       </span>
                       <button
@@ -602,7 +718,7 @@ export default function Transactions() {
                         style={{
                           padding: '5px 12px', borderRadius: 8, border: 'none',
                           background: accent, color: '#000', fontSize: 11.5,
-                          fontFamily: 'DM Sans', fontWeight: 600, cursor: 'pointer',
+                          fontFamily: 'DM Sans', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
                         }}
                       >
                         Log Now
@@ -613,7 +729,7 @@ export default function Transactions() {
                           padding: '5px 10px', borderRadius: 8,
                           border: '1px solid #2A2D3E', background: '#1E2130',
                           color: '#9CA3AF', fontSize: 11.5, fontFamily: 'DM Sans',
-                          fontWeight: 600, cursor: 'pointer',
+                          fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
                         }}
                       >Edit</button>
                       <button
@@ -624,7 +740,7 @@ export default function Transactions() {
                           border: `1px solid ${rec.active ? 'rgba(245,158,11,0.3)' : 'rgba(34,197,94,0.3)'}`,
                           background: rec.active ? 'rgba(245,158,11,0.08)' : 'rgba(34,197,94,0.08)',
                           color: rec.active ? '#F59E0B' : '#22C55E',
-                          fontSize: 11.5, fontFamily: 'DM Sans', fontWeight: 600, cursor: 'pointer',
+                          fontSize: 11.5, fontFamily: 'DM Sans', fontWeight: 600, cursor: 'pointer', whiteSpace: 'nowrap',
                         }}
                       >{rec.active ? 'Pause' : 'Resume'}</button>
                       <button
@@ -632,7 +748,7 @@ export default function Transactions() {
                         style={{
                           background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.2)',
                           borderRadius: 8, padding: '5px 10px', color: '#EF4444',
-                          fontSize: 11.5, fontFamily: 'DM Sans', cursor: 'pointer', fontWeight: 600,
+                          fontSize: 11.5, fontFamily: 'DM Sans', cursor: 'pointer', fontWeight: 600, whiteSpace: 'nowrap',
                         }}
                       >Delete</button>
                     </div>

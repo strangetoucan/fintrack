@@ -249,7 +249,7 @@ export default function Dashboard({ onNavigate }) {
         </div>
 
         {/* Bottom row */}
-        <div style={{ display: 'flex', gap: 'var(--content-gap, 14px)' }}>
+        <div className="bottom-row" style={{ gap: 'var(--content-gap, 14px)' }}>
           <Card style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Monthly Savings</div>
             <div style={{ color: '#6B7280', fontSize: 12, marginBottom: 12 }}>Hover bars to inspect</div>

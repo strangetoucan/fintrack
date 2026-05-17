@@ -1,4 +1,14 @@
 import React, { useState, useEffect } from 'react';
+
+const useIsMobile = () => {
+  const [w, setW] = useState(window.innerWidth);
+  useEffect(() => {
+    const fn = () => setW(window.innerWidth);
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, []);
+  return w <= 640;
+};
 import Card from '../components/ui/Card';
 import StatCard from '../components/ui/StatCard';
 import Badge from '../components/ui/Badge';
@@ -31,6 +41,7 @@ export default function Investments() {
   const [txnModal,   setTxnModal  ] = useState(null);    // null | {investment}
   const [confirmDlg, setConfirmDlg] = useState(null);
   const accent = useAccent();
+  const isMobile = useIsMobile();
 
   const load = () => {
     fetchInvestments().then(setInvs).catch(() => {});
@@ -96,12 +107,12 @@ export default function Investments() {
           <Card style={{ flex: 1.4, minWidth: 0 }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Portfolio Allocation</div>
             <div style={{ color: '#6B7280', fontSize: 12, marginBottom: 16 }}>By asset class</div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+            <div style={{ display: 'flex', alignItems: isMobile ? 'center' : 'center', flexDirection: isMobile ? 'column' : 'row', gap: isMobile ? 16 : 24 }}>
               <DonutChart
                 segments={alloc.length ? alloc : [{ value: 1, color: '#2A2D3E' }]}
-                size={150} thickness={28} label={fmtK(totalCurr)} sublabel="total"
+                size={isMobile ? 120 : 150} thickness={isMobile ? 22 : 28} label={fmtK(totalCurr)} sublabel="total"
               />
-              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 12, width: isMobile ? '100%' : undefined }}>
                 {alloc.length === 0 && <div style={{ color: '#6B7280', fontSize: 13 }}>No investments yet</div>}
                 {alloc.map((a) => (
                   <div key={a.name}>
@@ -148,80 +159,142 @@ export default function Investments() {
             ))}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 80px 120px 120px 100px 90px 52px 72px', overflowX: 'auto' }}>
-            {['Name', 'Type', 'Invested', 'Current', 'Returns', 'SIP/mo', 'History', ''].map((h) => (
-              <div key={h} style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '8px 12px', borderBottom: '1px solid #2A2D3E' }}>
-                {h}
-              </div>
-            ))}
+          {isMobile ? (
+            <div>
+              {filtered.length === 0 && (
+                <div style={{ padding: '24px 0', color: '#6B7280', fontSize: 13, textAlign: 'center' }}>
+                  No investments found — add one above.
+                </div>
+              )}
+              {filtered.map((inv) => {
+                const ret = inv.current - inv.invested;
+                return (
+                  <div key={inv.id} style={{ padding: '12px 0', borderBottom: '1px solid #1E2130' }}>
+                    <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontSize: 13, fontWeight: 500, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{inv.name}</div>
+                        <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{inv.platform}</div>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                        <Badge color={TYPE_COLOR[inv.type] ?? '#6B7280'}>{inv.type}</Badge>
+                        <button
+                          onClick={() => setTxnModal(inv)} title="History"
+                          style={{ ...btnIcon, color: '#6B7280', fontSize: 13, padding: '2px 4px' }}
+                        >📋</button>
+                        <button
+                          onClick={() => setModal(inv)} title="Edit"
+                          style={{ ...btnIcon, color: '#6B7280', fontSize: 14 }}
+                        >✎</button>
+                        <button
+                          onClick={() => handleDelete(inv)} title="Delete"
+                          style={{ ...btnIcon, color: '#6B7280', fontSize: 17 }}
+                        >×</button>
+                      </div>
+                    </div>
+                    <div style={{ display: 'flex', gap: 16, marginTop: 10, flexWrap: 'wrap' }}>
+                      <div>
+                        <div style={{ fontSize: 10.5, color: '#6B7280', marginBottom: 2 }}>Invested</div>
+                        <div style={{ fontSize: 13, fontFamily: 'DM Mono' }}>{fmt(inv.invested)}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10.5, color: '#6B7280', marginBottom: 2 }}>Current</div>
+                        <div style={{ fontSize: 13, fontFamily: 'DM Mono', fontWeight: 600 }}>{fmt(inv.current)}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 10.5, color: '#6B7280', marginBottom: 2 }}>Returns</div>
+                        <div style={{ fontSize: 13, fontFamily: 'DM Mono', fontWeight: 600, color: ret >= 0 ? '#22C55E' : '#EF4444' }}>
+                          {ret >= 0 ? '+' : ''}{inv.returns}%
+                        </div>
+                      </div>
+                      {inv.sip > 0 && (
+                        <div>
+                          <div style={{ fontSize: 10.5, color: '#6B7280', marginBottom: 2 }}>SIP/mo</div>
+                          <div style={{ fontSize: 13, fontFamily: 'DM Mono', color: '#9CA3AF' }}>{fmt(inv.sip)}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{ overflowX: 'auto' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 80px 120px 120px 100px 90px 52px 72px', minWidth: 640 }}>
+                {['Name', 'Type', 'Invested', 'Current', 'Returns', 'SIP/mo', 'History', ''].map((h) => (
+                  <div key={h} style={{ fontSize: 11, fontWeight: 600, color: '#6B7280', textTransform: 'uppercase', letterSpacing: '0.08em', padding: '8px 12px', borderBottom: '1px solid #2A2D3E' }}>
+                    {h}
+                  </div>
+                ))}
 
-            {filtered.length === 0 && (
-              <div style={{ gridColumn: '1 / -1', padding: '24px 12px', color: '#6B7280', fontSize: 13, textAlign: 'center' }}>
-                No investments found — add one above.
-              </div>
-            )}
+                {filtered.length === 0 && (
+                  <div style={{ gridColumn: '1 / -1', padding: '24px 12px', color: '#6B7280', fontSize: 13, textAlign: 'center' }}>
+                    No investments found — add one above.
+                  </div>
+                )}
 
-            {filtered.map((inv) => {
-              const ret    = inv.current - inv.invested;
-              const retPct = inv.returns;
-              return (
-                <React.Fragment key={inv.id}>
-                  <div style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22' }}>
-                    <div style={{ fontSize: 13, fontWeight: 500 }}>{inv.name}</div>
-                    <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{inv.platform}</div>
-                  </div>
-                  <div style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center' }}>
-                    <Badge color={TYPE_COLOR[inv.type] ?? '#6B7280'}>{inv.type}</Badge>
-                  </div>
-                  <div style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center', fontSize: 13, fontFamily: 'DM Mono' }}>
-                    {fmt(inv.invested)}
-                  </div>
-                  <div style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center', fontSize: 13, fontWeight: 600, fontFamily: 'DM Mono' }}>
-                    {fmt(inv.current)}
-                  </div>
-                  <div style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center' }}>
-                    <span style={{ fontFamily: 'DM Mono', fontSize: 13, color: ret >= 0 ? '#22C55E' : '#EF4444', fontWeight: 600 }}>
-                      {ret >= 0 ? '+' : ''}{retPct}%
-                    </span>
-                  </div>
-                  <div style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center', fontSize: 13, color: '#9CA3AF', fontFamily: 'DM Mono' }}>
-                    {inv.sip ? fmt(inv.sip) : '—'}
-                  </div>
-                  <div style={{ padding: '13px 6px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <button
-                      onClick={() => setTxnModal(inv)}
-                      title="Transaction history"
-                      style={{ ...btnIcon, color: '#6B7280', fontSize: 13, padding: '4px 8px' }}
-                      onMouseEnter={(e) => e.currentTarget.style.color = accent}
-                      onMouseLeave={(e) => e.currentTarget.style.color = '#6B7280'}
-                    >
-                      📋
-                    </button>
-                  </div>
-                  <div style={{ padding: '13px 6px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center', gap: 2 }}>
-                    <button
-                      onClick={() => setModal(inv)}
-                      title="Edit"
-                      style={{ ...btnIcon, color: '#6B7280', fontSize: 13 }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = '#2A2D3E'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
-                    >
-                      ✎
-                    </button>
-                    <button
-                      onClick={() => handleDelete(inv)}
-                      title="Delete"
-                      style={{ ...btnIcon, color: '#6B7280', fontSize: 16 }}
-                      onMouseEnter={(e) => e.currentTarget.style.color = '#EF4444'}
-                      onMouseLeave={(e) => e.currentTarget.style.color = '#6B7280'}
-                    >
-                      ×
-                    </button>
-                  </div>
-                </React.Fragment>
-              );
-            })}
-          </div>
+                {filtered.map((inv) => {
+                  const ret    = inv.current - inv.invested;
+                  const retPct = inv.returns;
+                  return (
+                    <React.Fragment key={inv.id}>
+                      <div style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22' }}>
+                        <div style={{ fontSize: 13, fontWeight: 500 }}>{inv.name}</div>
+                        <div style={{ fontSize: 11, color: '#6B7280', marginTop: 2 }}>{inv.platform}</div>
+                      </div>
+                      <div style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center' }}>
+                        <Badge color={TYPE_COLOR[inv.type] ?? '#6B7280'}>{inv.type}</Badge>
+                      </div>
+                      <div style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center', fontSize: 13, fontFamily: 'DM Mono' }}>
+                        {fmt(inv.invested)}
+                      </div>
+                      <div style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center', fontSize: 13, fontWeight: 600, fontFamily: 'DM Mono' }}>
+                        {fmt(inv.current)}
+                      </div>
+                      <div style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center' }}>
+                        <span style={{ fontFamily: 'DM Mono', fontSize: 13, color: ret >= 0 ? '#22C55E' : '#EF4444', fontWeight: 600 }}>
+                          {ret >= 0 ? '+' : ''}{retPct}%
+                        </span>
+                      </div>
+                      <div style={{ padding: '13px 12px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center', fontSize: 13, color: '#9CA3AF', fontFamily: 'DM Mono' }}>
+                        {inv.sip ? fmt(inv.sip) : '—'}
+                      </div>
+                      <div style={{ padding: '13px 6px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <button
+                          onClick={() => setTxnModal(inv)}
+                          title="Transaction history"
+                          style={{ ...btnIcon, color: '#6B7280', fontSize: 13, padding: '4px 8px' }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = accent}
+                          onMouseLeave={(e) => e.currentTarget.style.color = '#6B7280'}
+                        >
+                          📋
+                        </button>
+                      </div>
+                      <div style={{ padding: '13px 6px', borderBottom: '1px solid #2A2D3E22', display: 'flex', alignItems: 'center', gap: 2 }}>
+                        <button
+                          onClick={() => setModal(inv)}
+                          title="Edit"
+                          style={{ ...btnIcon, color: '#6B7280', fontSize: 13 }}
+                          onMouseEnter={(e) => e.currentTarget.style.background = '#2A2D3E'}
+                          onMouseLeave={(e) => e.currentTarget.style.background = 'none'}
+                        >
+                          ✎
+                        </button>
+                        <button
+                          onClick={() => handleDelete(inv)}
+                          title="Delete"
+                          style={{ ...btnIcon, color: '#6B7280', fontSize: 16 }}
+                          onMouseEnter={(e) => e.currentTarget.style.color = '#EF4444'}
+                          onMouseLeave={(e) => e.currentTarget.style.color = '#6B7280'}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    </React.Fragment>
+                  );
+                })}
+              </div>
+            </div>
+          )}
         </Card>
       </div>
 
