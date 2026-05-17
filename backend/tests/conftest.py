@@ -30,15 +30,19 @@ _Session = sessionmaker(autocommit=False, autoflush=False, bind=_engine)
 _db_module.engine = _engine
 _db_module.SessionLocal = _Session
 
-from routers import transactions, investments, budget, goals, subscriptions  # noqa: E402
+from routers import transactions, investments, budget, goals, subscriptions, accounts, recurring, search, user_settings  # noqa: E402
 
 # Minimal app — no lifespan, no migrations, no seed
 _app = FastAPI()
-_app.include_router(transactions.router,  prefix="/api/transactions")
-_app.include_router(investments.router,   prefix="/api/investments")
-_app.include_router(budget.router,        prefix="/api/budget")
-_app.include_router(goals.router,         prefix="/api/goals")
-_app.include_router(subscriptions.router, prefix="/api/subscriptions")
+_app.include_router(transactions.router,   prefix="/api/transactions")
+_app.include_router(investments.router,    prefix="/api/investments")
+_app.include_router(budget.router,         prefix="/api/budget")
+_app.include_router(goals.router,          prefix="/api/goals")
+_app.include_router(subscriptions.router,  prefix="/api/subscriptions")
+_app.include_router(accounts.router,       prefix="/api/accounts")
+_app.include_router(recurring.router,      prefix="/api/recurring")
+_app.include_router(search.router,         prefix="/api/search")
+_app.include_router(user_settings.router,  prefix="/api/settings")
 
 
 @pytest.fixture(autouse=True)
