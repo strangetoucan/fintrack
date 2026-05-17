@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional
-from datetime import date
+from datetime import date, datetime
 
 from database import get_db
 from models import BudgetCategory as BudgetCategoryModel, Transaction, TxType
@@ -35,19 +35,23 @@ class BudgetCategoryUpdate(BaseModel):
     color:  Optional[str]  = Field(default=None, pattern=r'^#[0-9A-Fa-f]{3,6}$')
 
 
-def _spent_map(db: Session) -> dict:
-    now = date.today()
+def _spent_map_for(db: Session, year: int, month: int) -> dict:
     rows = (
         db.query(Transaction.category, func.sum(func.abs(Transaction.amount)).label("spent"))
         .filter(
             Transaction.type == TxType.expense,
-            extract("year",  Transaction.date) == now.year,
-            extract("month", Transaction.date) == now.month,
+            extract("year",  Transaction.date) == year,
+            extract("month", Transaction.date) == month,
         )
         .group_by(Transaction.category)
         .all()
     )
     return {r.category: float(r.spent) for r in rows}
+
+
+def _spent_map(db: Session) -> dict:
+    now = date.today()
+    return _spent_map_for(db, now.year, now.month)
 
 
 @router.get("/", response_model=list[BudgetCategoryOut])
@@ -90,6 +94,32 @@ def delete_budget_category(cat_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Category not found")
     db.delete(cat)
     db.commit()
+
+
+class BudgetVsActualOut(BaseModel):
+    name:     str
+    budgeted: float
+    spent:    float
+    color:    str
+
+
+@router.get("/vs-actual", response_model=list[BudgetVsActualOut])
+def budget_vs_actual(month: Optional[str] = Query(default=None), db: Session = Depends(get_db)):
+    if month:
+        try:
+            dt = datetime.strptime(month, "%Y-%m")
+            y, m = dt.year, dt.month
+        except ValueError:
+            raise HTTPException(status_code=400, detail="month must be YYYY-MM")
+    else:
+        now = date.today()
+        y, m = now.year, now.month
+    cats      = db.query(BudgetCategoryModel).all()
+    spent_map = _spent_map_for(db, y, m)
+    return [
+        BudgetVsActualOut(name=c.name, budgeted=float(c.budget), spent=spent_map.get(c.name, 0.0), color=c.color)
+        for c in cats
+    ]
 
 
 @router.get("/summary")

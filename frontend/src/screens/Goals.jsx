@@ -17,11 +17,12 @@ const btnIcon = {
 
 export default function Goals() {
   const accent = useAccent();
-  const [goals,      setGoals     ] = useState([]);
-  const [emis,       setEmis      ] = useState([]);
-  const [goalModal,  setGoalModal ] = useState(null); // null | 'add' | {editing goal}
-  const [emiModal,   setEmiModal  ] = useState(null); // null | 'add' | {editing emi}
-  const [confirmDlg, setConfirmDlg] = useState(null);
+  const [goals,       setGoals      ] = useState([]);
+  const [emis,        setEmis       ] = useState([]);
+  const [goalModal,   setGoalModal  ] = useState(null); // null | 'add' | {editing goal}
+  const [emiModal,    setEmiModal   ] = useState(null); // null | 'add' | {editing emi}
+  const [confirmDlg,  setConfirmDlg ] = useState(null);
+  const [projections, setProjections] = useState({});  // { [goalId]: string }
 
   const load = () => {
     fetchGoals().then(setGoals).catch(() => {});
@@ -127,6 +128,44 @@ export default function Goals() {
                     : `${fmt(g.target - g.current)} more needed`
                   }
                 </div>
+
+                {g.current < g.target && (() => {
+                  const monthly   = parseFloat(projections[g.id]) || 0;
+                  const remaining = g.target - g.current;
+                  const months    = monthly > 0 ? Math.ceil(remaining / monthly) : null;
+                  const projDate  = months !== null ? (() => {
+                    const d = new Date();
+                    d.setMonth(d.getMonth() + months);
+                    return d.toLocaleString('default', { month: 'short', year: 'numeric' });
+                  })() : null;
+                  return (
+                    <div style={{ marginTop: 12, paddingTop: 10, borderTop: '1px solid #2A2D3E' }}>
+                      <div style={{ fontSize: 11, color: '#6B7280', marginBottom: 6, fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+                        Projector
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 12, color: '#9CA3AF', whiteSpace: 'nowrap' }}>Monthly top-up</span>
+                        <div style={{ display: 'flex', alignItems: 'center', flex: 1, background: '#13161F', border: '1px solid #2A2D3E', borderRadius: 7, padding: '4px 8px' }}>
+                          <span style={{ color: g.color, fontSize: 12, marginRight: 3 }}>₹</span>
+                          <input
+                            type="number"
+                            min="0"
+                            value={projections[g.id] ?? ''}
+                            onChange={e => setProjections(p => ({ ...p, [g.id]: e.target.value }))}
+                            placeholder="0"
+                            style={{ background: 'none', border: 'none', outline: 'none', color: '#E8EAF0', fontSize: 12, width: '100%', fontFamily: 'DM Mono' }}
+                          />
+                        </div>
+                      </div>
+                      <div style={{ marginTop: 6, fontSize: 12 }}>
+                        {projDate
+                          ? <span>Done in <span style={{ color: g.color, fontWeight: 600 }}>{months} month{months !== 1 ? 's' : ''}</span> · <span style={{ color: '#9CA3AF' }}>{projDate}</span></span>
+                          : <span style={{ color: '#4B5563' }}>Enter a monthly amount to project</span>
+                        }
+                      </div>
+                    </div>
+                  );
+                })()}
               </Card>
             );
           })}

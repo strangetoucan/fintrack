@@ -118,3 +118,11 @@ class BankAccount(Base):
     color        = Column(String(20), nullable=False, default="#3B82F6")
     notes        = Column(String(500), nullable=True)
     updated_at   = Column(DateTime, server_default=func.now(), onupdate=func.now(), nullable=False)
+
+
+class NetWorthSnapshot(Base):
+    __tablename__ = "net_worth_snapshots"
+
+    id        = Column(Integer, primary_key=True, autoincrement=True)
+    month     = Column(String(7), nullable=False, unique=True)  # YYYY-MM
+    net_worth = Column(Numeric(16, 2), nullable=False)

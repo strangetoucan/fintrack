@@ -57,14 +57,17 @@ EMI_SEED = [
 
 
 def seed_if_empty(db: Session) -> None:
-    if db.query(Transaction).count() == 0:
-        db.bulk_insert_mappings(Transaction, TRANSACTION_SEED)
-    if db.query(Investment).count() == 0:
-        db.bulk_insert_mappings(Investment, INVESTMENT_SEED)
-    if db.query(BudgetCategory).count() == 0:
-        db.bulk_insert_mappings(BudgetCategory, BUDGET_SEED)
-    if db.query(Goal).count() == 0:
-        db.bulk_insert_mappings(Goal, GOAL_SEED)
-    if db.query(EMI).count() == 0:
-        db.bulk_insert_mappings(EMI, EMI_SEED)
+    # Only seed when the database is completely fresh — if any table has rows,
+    # the user has real data and we must not overwrite it.
+    has_data = any(
+        db.query(model).count() > 0
+        for model in [Transaction, Investment, BudgetCategory, Goal, EMI]
+    )
+    if has_data:
+        return
+    db.bulk_insert_mappings(Transaction,    TRANSACTION_SEED)
+    db.bulk_insert_mappings(Investment,     INVESTMENT_SEED)
+    db.bulk_insert_mappings(BudgetCategory, BUDGET_SEED)
+    db.bulk_insert_mappings(Goal,           GOAL_SEED)
+    db.bulk_insert_mappings(EMI,            EMI_SEED)
     db.commit()

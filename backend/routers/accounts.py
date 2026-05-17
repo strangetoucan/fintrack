@@ -2,9 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field, field_validator
 from typing import Optional, Literal
+from datetime import datetime
 
 from database import get_db
-from models import BankAccount
+from models import BankAccount, Investment, NetWorthSnapshot
 
 router = APIRouter()
 
@@ -52,6 +53,11 @@ class SummaryOut(BaseModel):
     account_count:  int
 
 
+class SnapshotOut(BaseModel):
+    month:     str
+    net_worth: float
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.get("/", response_model=list[AccountOut])
@@ -79,6 +85,36 @@ def create_account(body: AccountCreate, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(acct)
     return acct
+
+
+@router.post("/net-worth-snapshot", response_model=SnapshotOut)
+def save_net_worth_snapshot(db: Session = Depends(get_db)):
+    month     = datetime.utcnow().strftime("%Y-%m")
+    accounts  = db.query(BankAccount).all()
+    investments = db.query(Investment).all()
+    net_worth = (
+        sum(float(a.balance) for a in accounts)
+        + sum(float(i.current) for i in investments)
+    )
+    snap = db.query(NetWorthSnapshot).filter(NetWorthSnapshot.month == month).first()
+    if snap:
+        snap.net_worth = net_worth
+    else:
+        snap = NetWorthSnapshot(month=month, net_worth=net_worth)
+        db.add(snap)
+    db.commit()
+    return SnapshotOut(month=month, net_worth=net_worth)
+
+
+@router.get("/net-worth-history", response_model=list[SnapshotOut])
+def get_net_worth_history(db: Session = Depends(get_db)):
+    snaps = (
+        db.query(NetWorthSnapshot)
+        .order_by(NetWorthSnapshot.month.asc())
+        .limit(12)
+        .all()
+    )
+    return [SnapshotOut(month=s.month, net_worth=float(s.net_worth)) for s in snaps]
 
 
 @router.put("/{acct_id}", response_model=AccountOut)

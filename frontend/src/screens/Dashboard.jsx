@@ -1,4 +1,14 @@
 import { useState, useEffect } from 'react';
+
+const useIsMobile = () => {
+  const [w, setW] = useState(window.innerWidth);
+  useEffect(() => {
+    const fn = () => setW(window.innerWidth);
+    window.addEventListener('resize', fn);
+    return () => window.removeEventListener('resize', fn);
+  }, []);
+  return w <= 640;
+};
 import Card from '../components/ui/Card';
 import StatCard from '../components/ui/StatCard';
 import Badge from '../components/ui/Badge';
@@ -7,12 +17,11 @@ import AccentButton from '../components/ui/AccentButton';
 import AddTransactionModal from '../components/modals/AddTransactionModal';
 import AreaChart from '../components/charts/AreaChart';
 import DonutChart from '../components/charts/DonutChart';
-import BarChart from '../components/charts/BarChart';
 import { fmt, fmtK } from '../utils/format';
 import { fetchTransactions } from '../api/transactions';
 import { apiFetch } from '../api/client';
 import { fetchInvestmentSummary } from '../api/investments';
-import { fetchAccountSummary } from '../api/accounts';
+import { fetchAccountSummary, fetchNetWorthHistory, saveNetWorthSnapshot } from '../api/accounts';
 import { useAccent } from '../context/TweakContext';
 import { useSettingsCtx } from '../context/SettingsContext';
 
@@ -68,6 +77,7 @@ const btnStyle = (active, accent) => ({
 });
 
 export default function Dashboard({ onNavigate }) {
+  const isMobile = useIsMobile();
   const accent = useAccent();
   const { settings } = useSettingsCtx();
   const [showModal,   setShowModal  ] = useState(false);
@@ -75,6 +85,7 @@ export default function Dashboard({ onNavigate }) {
   const [monthly,     setMonthly    ] = useState([]);
   const [invSummary,  setInvSummary ] = useState(null);
   const [acctSummary, setAcctSummary] = useState(null);
+  const [nwHistory,   setNwHistory  ] = useState([]);
 
   const today       = new Date();
   const currentYM   = toYM(today);
@@ -109,6 +120,8 @@ export default function Dashboard({ onNavigate }) {
     apiFetch('/transactions/monthly-summary').then(setMonthly).catch(() => {});
     fetchInvestmentSummary().then(setInvSummary).catch(() => {});
     fetchAccountSummary().then(setAcctSummary).catch(() => {});
+    saveNetWorthSnapshot().catch(() => {});
+    fetchNetWorthHistory().then(setNwHistory).catch(() => {});
   };
 
   useEffect(() => { loadAll(); }, []);
@@ -211,7 +224,7 @@ export default function Dashboard({ onNavigate }) {
             )}
           </Card>
 
-          <Card style={{ flex: 1, minWidth: 0 }}>
+          <Card style={{ flex: 1, minWidth: isMobile ? '100%' : 0 }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Expense Breakdown</div>
             <div style={{ color: '#6B7280', fontSize: 12, marginBottom: 16 }}>{ymLabel(viewMonth)}</div>
             <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -248,19 +261,77 @@ export default function Dashboard({ onNavigate }) {
           </Card>
         </div>
 
+        {/* Net Worth History */}
+        {nwHistory.length > 0 && (() => {
+          const nwLabels = nwHistory.map(s => {
+            const [y, m] = s.month.split('-');
+            return new Date(Number(y), Number(m) - 1).toLocaleString('default', { month: 'short' });
+          });
+          const nwData   = nwHistory.map(s => s.net_worth);
+          const latest   = nwData[nwData.length - 1] ?? 0;
+          const earliest = nwData[0] ?? 0;
+          const change   = nwHistory.length > 1 ? latest - earliest : null;
+          return (
+            <Card>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                <div>
+                  <div style={{ fontWeight: 600, fontSize: 15 }}>Net Worth History</div>
+                  <div style={{ color: '#6B7280', fontSize: 12, marginTop: 2 }}>
+                    Accounts + investments · last {nwHistory.length} month{nwHistory.length !== 1 ? 's' : ''}
+                  </div>
+                </div>
+                {change !== null && (
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontFamily: 'DM Mono', fontSize: 18, fontWeight: 700, color: accent }}>{fmtK(latest)}</div>
+                    <div style={{ fontSize: 11.5, color: change >= 0 ? '#22C55E' : '#EF4444', marginTop: 2 }}>
+                      {change >= 0 ? '+' : ''}{fmtK(change)} all-time
+                    </div>
+                  </div>
+                )}
+              </div>
+              <AreaChart data1={nwData} labels={nwLabels} color1={accent} height={120} />
+            </Card>
+          );
+        })()}
+
         {/* Bottom row */}
         <div className="bottom-row" style={{ gap: 'var(--content-gap, 14px)' }}>
-          <Card style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 4 }}>Monthly Savings</div>
-            <div style={{ color: '#6B7280', fontSize: 12, marginBottom: 12 }}>Hover bars to inspect</div>
-            {savingsData.length > 0 ? (
-              <BarChart data={savingsData} labels={chartLabels} color={accent} height={100} />
-            ) : (
+          <Card style={{ flex: 1, minWidth: isMobile ? '100%' : 0 }}>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 14 }}>Monthly Savings</div>
+            {monthly.length === 0 ? (
               <div style={{ color: '#6B7280', fontSize: 13, textAlign: 'center', paddingTop: 24 }}>No data yet</div>
-            )}
+            ) : (() => {
+              const maxAbs = Math.max(...monthly.map(m => Math.abs(m.savings)), 1);
+              return (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {monthly.slice(-6).map((m) => {
+                    const pct      = Math.abs(m.savings) / maxAbs * 100;
+                    const positive = m.savings >= 0;
+                    const barColor = positive ? accent : '#EF4444';
+                    return (
+                      <div key={m.month} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 11, color: '#6B7280', fontFamily: 'DM Sans', minWidth: 28, flexShrink: 0 }}>
+                          {m.month.slice(5)}
+                        </span>
+                        <div style={{ flex: 1, height: 6, background: '#2A2D3E', borderRadius: 99, overflow: 'hidden' }}>
+                          <div style={{
+                            width: `${pct}%`, height: '100%',
+                            background: barColor, borderRadius: 99,
+                            transition: 'width 0.6s ease',
+                          }} />
+                        </div>
+                        <span style={{ fontSize: 11.5, fontFamily: 'DM Mono', fontWeight: 600, color: barColor, minWidth: 52, textAlign: 'right', flexShrink: 0 }}>
+                          {positive ? '+' : ''}{fmtK(m.savings)}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </Card>
 
-          <Card style={{ flex: 1, minWidth: 0 }}>
+          <Card style={{ flex: 1, minWidth: isMobile ? '100%' : 0 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
               <div style={{ fontWeight: 600, fontSize: 15 }}>Recent Transactions</div>
               <button
@@ -291,7 +362,7 @@ export default function Dashboard({ onNavigate }) {
             )}
           </Card>
 
-          <Card style={{ flex: 1, minWidth: 0 }}>
+          <Card style={{ flex: 1, minWidth: isMobile ? '100%' : 0 }}>
             <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 14 }}>Investment Summary</div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {[

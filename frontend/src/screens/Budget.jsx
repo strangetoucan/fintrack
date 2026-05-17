@@ -8,6 +8,7 @@ import BudgetCategoryModal from '../components/modals/BudgetCategoryModal';
 import ConfirmDialog from '../components/ui/ConfirmDialog';
 import { fmt } from '../utils/format';
 import { fetchBudget, fetchBudgetSummary, deleteBudgetCategory } from '../api/budget';
+import { useAccent } from '../context/TweakContext';
 
 const btnIcon = {
   background: 'none', border: 'none', cursor: 'pointer',
@@ -16,6 +17,7 @@ const btnIcon = {
 };
 
 export default function Budget() {
+  const accent = useAccent();
   const [cats,       setCats      ] = useState([]);
   const [summary,    setSummary   ] = useState(null);
   const [modal,      setModal     ] = useState(null); // null | 'add' | {editing cat}
@@ -74,6 +76,54 @@ export default function Budget() {
             />
           </Card>
         </div>
+
+        {cats.length > 0 && (
+          <Card>
+            <div style={{ fontWeight: 600, fontSize: 15, marginBottom: 16 }}>
+              Budget vs Actual
+              <span style={{ fontSize: 12, fontWeight: 400, color: '#6B7280', marginLeft: 8 }}>{monthLabel}</span>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {cats.map((cat) => {
+                const pct  = cat.budget > 0 ? Math.min((cat.spent / cat.budget) * 100, 100) : 0;
+                const over = cat.spent > cat.budget;
+                return (
+                  <div key={cat.id}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                        <div style={{ width: 8, height: 8, borderRadius: 2, background: cat.color, flexShrink: 0 }} />
+                        <span style={{ fontSize: 12.5, fontWeight: 500 }}>{cat.name}</span>
+                      </div>
+                      <div style={{ fontSize: 11.5, fontFamily: 'DM Mono', color: over ? '#EF4444' : '#9CA3AF' }}>
+                        {fmt(cat.spent)}
+                        <span style={{ color: '#4B5563' }}> / {fmt(cat.budget)}</span>
+                      </div>
+                    </div>
+                    <div style={{ position: 'relative', height: 7, background: '#2A2D3E', borderRadius: 99, overflow: 'hidden' }}>
+                      <div style={{
+                        position: 'absolute', left: 0, top: 0, height: '100%',
+                        width: `${pct}%`,
+                        background: over ? '#EF4444' : cat.color,
+                        borderRadius: 99,
+                        transition: 'width 0.8s ease',
+                      }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ display: 'flex', gap: 16, marginTop: 14, paddingTop: 12, borderTop: '1px solid #2A2D3E' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: '#6B7280' }}>
+                <div style={{ width: 10, height: 4, borderRadius: 2, background: accent }} />
+                Within budget
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11.5, color: '#6B7280' }}>
+                <div style={{ width: 10, height: 4, borderRadius: 2, background: '#EF4444' }} />
+                Over budget
+              </div>
+            </div>
+          </Card>
+        )}
 
         <div className="two-col budget-grid" style={{ gap: 'var(--content-gap,14px)' }}>
           {cats.length === 0 && (

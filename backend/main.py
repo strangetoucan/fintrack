@@ -124,7 +124,8 @@ def reset_all_data(body: ResetConfirm):
     try:
         db.execute(text("SET FOREIGN_KEY_CHECKS=0"))
         for table in ["recurring_transactions", "transactions", "investments",
-                      "budget_categories", "goals", "emis", "subscriptions", "bank_accounts"]:
+                      "budget_categories", "goals", "emis", "subscriptions",
+                      "bank_accounts", "net_worth_snapshots"]:
             db.execute(text(f"TRUNCATE TABLE `{table}`"))
         db.execute(text("SET FOREIGN_KEY_CHECKS=1"))
         db.commit()
